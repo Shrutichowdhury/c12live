@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SkyDroid Live Streaming Dashboard</title>
+  <link rel="stylesheet" href="/static/css/style.css" />
+</head>
+<body>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       HEADER
+  ═══════════════════════════════════════════════════════════ -->
+  <header>
+    <div class="header-icon">🛸</div>
+    <h1>SkyDroid Live Streaming Dashboard</h1>
+    <p>Visible and Thermal Camera Monitoring · SkyDroid C12</p>
+  </header>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       MAIN CONTENT
+  ═══════════════════════════════════════════════════════════ -->
+  <main>
+
+    <!-- ── Control panel ──────────────────────────────────────── -->
+    <section aria-label="Stream Controls">
+      <p class="section-heading">Stream Controls</p>
+      <div class="control-panel">
+        <span class="label">Manage live RTSP streams:</span>
+        <button class="btn btn-start" id="btn-start">
+          ▶ Start Streams
+        </button>
+        <button class="btn btn-stop" id="btn-stop">
+          ■ Stop Streams
+        </button>
+        <button class="btn btn-refresh" id="btn-refresh">
+          ↻ Refresh Status
+        </button>
+      </div>
+    </section>
+
+    <!-- ── Status cards ────────────────────────────────────────── -->
+    <section aria-label="Stream Status">
+      <p class="section-heading">Live Status</p>
+      <div class="status-grid">
+
+        <div class="stat-card">
+          <span class="stat-label">📷 Visible Camera</span>
+          <div id="visible-status" class="badge badge-offline">
+            <span class="badge-dot"></span> Offline
+          </div>
+        </div>
+
+        <div class="stat-card">
+          <span class="stat-label">🌡️ Thermal Camera</span>
+          <div id="thermal-status" class="badge badge-offline">
+            <span class="badge-dot"></span> Offline
+          </div>
+        </div>
+
+        <div class="stat-card">
+          <span class="stat-label">Visible FPS</span>
+          <span class="stat-value" id="visible-fps">— fps</span>
+        </div>
+
+        <div class="stat-card">
+          <span class="stat-label">Thermal FPS</span>
+          <span class="stat-value" id="thermal-fps">— fps</span>
+        </div>
+
+        <div class="stat-card">
+          <span class="stat-label">⏱ Server Uptime</span>
+          <span class="stat-value" id="uptime">0s</span>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ── Video streams ───────────────────────────────────────── -->
+    <section aria-label="Live Video Feeds">
+      <p class="section-heading">Live Feeds</p>
+      <div class="video-grid">
+
+        <!-- Visible camera -->
+        <div class="video-card">
+          <div class="video-card-header">
+            <span class="video-card-title">
+              <span class="icon">📷</span> Visible Camera
+            </span>
+            <span class="badge badge-offline" id="visible-status-cam">
+              <span class="badge-dot"></span> Offline
+            </span>
+          </div>
+          <div class="video-wrapper">
+            <img
+              src="/video/visible"
+              alt="Visible camera stream"
+              loading="eager"
+            />
+            <div class="video-overlay-fps" id="visible-fps-overlay">— fps</div>
+          </div>
+        </div>
+
+        <!-- Thermal camera -->
+        <div class="video-card">
+          <div class="video-card-header">
+            <span class="video-card-title">
+              <span class="icon">🌡️</span> Thermal Camera
+            </span>
+            <span class="badge badge-offline" id="thermal-status-cam">
+              <span class="badge-dot"></span> Offline
+            </span>
+          </div>
+          <div class="video-wrapper">
+            <img
+              src="/video/thermal"
+              alt="Thermal camera stream"
+              loading="eager"
+            />
+            <div class="video-overlay-fps" id="thermal-fps-overlay">— fps</div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       FOOTER
+  ═══════════════════════════════════════════════════════════ -->
+  <footer>
+    Designed for <strong>SkyDroid C12 + G20 + GR01</strong>
+  </footer>
+
+  <!-- Toast notification -->
+  <div id="toast"></div>
+
+  <script src="/static/js/app.js"></script>
+</body>
+</html>

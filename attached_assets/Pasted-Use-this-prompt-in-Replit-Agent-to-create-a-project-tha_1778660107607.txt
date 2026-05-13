@@ -1,0 +1,242 @@
+Use this prompt in Replit Agent to create a project that only displays the two live RTSP streams in a browser (no AI yet).
+
+Build a complete Python Flask web application called "SkyDroid Live Streaming Dashboard".
+
+IMPORTANT:
+
+- Replit Preview may not be able to access the RTSP camera because the camera is on a private local network (192.168.144.108).
+- The project must still be fully generated.
+- I will download the project and run it locally in VS Code on my computer.
+- When run locally on the same network as the camera, the live streams must work.
+
+====================================================================
+PROJECT GOAL
+
+Create a professional web dashboard that displays two live RTSP streams from my SkyDroid C12 camera.
+
+RTSP URLs:
+
+1. Visible Camera:
+   rtsp://192.168.144.108:554/stream=1
+
+2. Thermal Camera:
+   rtsp://192.168.144.108:555/stream=2
+
+The application must:
+
+- Read RTSP streams using OpenCV.
+- Convert them into browser-compatible MJPEG streams.
+- Display both streams side by side in a modern dashboard.
+- Show stream status (Online/Offline).
+- Show FPS.
+- Automatically reconnect if the stream disconnects.
+- Include Start and Stop buttons.
+
+====================================================================
+TECH STACK
+
+Backend:
+
+- Python 3.11
+- Flask
+- Flask-CORS
+- OpenCV
+- NumPy
+
+Frontend:
+
+- HTML
+- CSS
+- JavaScript
+
+====================================================================
+PROJECT STRUCTURE
+
+skydroid-live-dashboard/
+│
+├── app.py
+├── requirements.txt
+├── README.md
+├── .gitignore
+│
+├── services/
+│   ├── init.py
+│   └── stream_manager.py
+│
+├── templates/
+│   └── index.html
+│
+├── static/
+│   ├── css/
+│   │   └── style.css
+│   └── js/
+│       └── app.js
+│
+└── snapshots/
+
+====================================================================
+RTSP STREAM CONFIGURATION
+
+Use these constants in the backend:
+
+VISIBLE_RTSP = "rtsp://192.168.144.108:554/stream=1"
+THERMAL_RTSP = "rtsp://192.168.144.108:555/stream=2"
+
+====================================================================
+BACKEND REQUIREMENTS
+
+Create a StreamManager class that:
+
+- Opens the RTSP stream in a background thread.
+- Continuously reads frames.
+- Calculates FPS.
+- Stores the latest frame.
+- Automatically reconnects if the stream fails.
+- Generates a placeholder image when the stream is offline.
+- Resizes frames to 1280x720.
+
+Flask routes:
+
+- GET /                      -> Dashboard page
+- GET /video/visible         -> MJPEG stream
+- GET /video/thermal         -> MJPEG stream
+- GET /api/status            -> JSON status
+- POST /api/start            -> Start both streams
+- POST /api/stop             -> Stop both streams
+
+/api/status must return:
+{
+"visible_connected": true,
+"thermal_connected": true,
+"visible_fps": 29.7,
+"thermal_fps": 24.5,
+"uptime_seconds": 1234
+}
+
+MJPEG endpoint format:
+multipart/x-mixed-replace; boundary=frame
+
+====================================================================
+FRONTEND REQUIREMENTS
+
+Create a professional dashboard with:
+
+HEADER:
+
+- Title: SkyDroid Live Streaming Dashboard
+- Subtitle: Visible and Thermal Camera Monitoring
+
+CONTROL PANEL:
+
+- Start Streams button
+- Stop Streams button
+- Refresh Status button
+
+STATUS CARDS:
+
+- Visible Camera Status
+- Thermal Camera Status
+- Visible FPS
+- Thermal FPS
+- Uptime
+
+VIDEO SECTION:
+
+- Two cards side by side:
+  - Visible Camera
+  - Thermal Camera
+- Each contains an <img> tag pointing to the MJPEG endpoints.
+
+FOOTER:
+
+- "Designed for SkyDroid C12 + G20 + GR01"
+
+UI DESIGN:
+
+- Dark theme by default
+- Gradient header
+- Rounded cards
+- Modern shadows
+- Responsive layout
+- Mobile-friendly
+
+====================================================================
+JAVASCRIPT REQUIREMENTS
+
+- Poll /api/status every 1 second.
+- Update status badges and FPS.
+- Handle Start and Stop buttons using fetch().
+- Show Online (green) and Offline (red) badges.
+
+====================================================================
+PLACEHOLDER IMAGE REQUIREMENTS
+
+When the RTSP stream is unavailable, generate an image that displays:
+
+- "Stream Offline"
+- The RTSP URL
+- "Run locally on the same network as 192.168.144.108"
+
+====================================================================
+REQUIREMENTS.TXT
+
+Include:
+flask
+flask-cors
+opencv-python
+numpy
+
+====================================================================
+README.MD REQUIREMENTS
+
+Include:
+
+1. Project overview
+2. Features
+3. Folder structure
+4. Installation instructions
+5. Local run instructions
+6. Troubleshooting
+7. How to change RTSP URLs
+
+Installation commands:
+
+python -m venv venv
+
+Windows:
+venv\Scripts\activate
+
+Linux/macOS:
+source venv/bin/activate
+
+pip install -r requirements.txt
+python app.py
+
+Open:
+http://localhost:5000
+
+Important:
+This project must be run on a computer connected to the same network as the SkyDroid camera (192.168.144.108).
+
+Replit Preview may not show the live streams because it cannot access devices on the local network.
+
+====================================================================
+APP.PY REQUIREMENTS
+
+- Initialize both StreamManager instances.
+- Start streams automatically on launch.
+- Gracefully release resources on shutdown.
+- Run Flask on host 0.0.0.0 and port 5000.
+
+====================================================================
+CODE QUALITY REQUIREMENTS
+
+- Clean modular code.
+- Full comments and docstrings.
+- Robust error handling.
+- Production-ready structure.
+
+====================================================================
+FINAL DELIVERABLE
+
+Generate all files with complete, working code and a polished UI. The project should be ready to download from Replit and run locally in VS Code to display the two live RTSP streams in the browser.
