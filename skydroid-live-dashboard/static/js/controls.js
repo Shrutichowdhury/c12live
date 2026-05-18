@@ -461,34 +461,123 @@ function initConnectionSettings() {
     const ip   = document.getElementById("inp-camera-ip")?.value   || "192.168.144.108";
     const port = parseInt(document.getElementById("inp-control-port")?.value || "37260", 10);
     const box  = document.getElementById("conn-probe-result");
+    const listenBox = document.getElementById("conn-listen-result");
+    if (listenBox) listenBox.className = "conn-probe-result hidden";
 
     if (box) {
-      box.textContent = "Sending SIYI protocol probes to " + ip + ":" + port + " …";
-      box.className = "conn-probe-result";
+      box.textContent = "⏳ Scanning 7 protocol formats + HTTP + passive listen on " + ip + ":" + port + " …\n(takes ~15 s, also sends a center-gimbal command — watch if the gimbal moves!)";
+      box.className = "conn-probe-result visible";
     }
 
     const r = await apiPost("/api/probe", { camera_ip: ip, control_port: port });
     if (!box) return;
-    box.className = "conn-probe-result visible";
 
-    let text = "Protocol probe results (" + ip + ":" + port + ")\n\n";
+    let text = "═══ Multi-Protocol Scan Results ═══\n" + ip + ":" + port + "\n\n";
+    let anyReply = false;
+
     (r.probes || []).forEach(p => {
-      text += "  Probe: " + p.probe + "\n";
-      text += "  Sent: " + (p.sent_hex || "–") + "\n";
+      text += "┌─ " + p.probe + "\n";
+      if (p.sent_hex) text += "│  Sent:  " + p.sent_hex + "\n";
       if (p.reply_hex) {
-        text += "  Reply (" + p.reply_len + " bytes): " + p.reply_hex + "\n";
-        const startsWithSiyi = p.reply_hex.startsWith("5566");
-        text += "  Protocol: " + (startsWithSiyi ? "✓ SIYI format confirmed!" : "? Unknown — share this hex to decode") + "\n";
+        anyReply = true;
+        text += "│  ✓ Reply (" + p.reply_len + "B from " + p.reply_from + "):\n";
+        text += "│     " + p.reply_hex + "\n";
+        if (p.reply_hex.startsWith("5566")) text += "│  ★ SIYI v1 format!\n";
+        else if (p.reply_hex.startsWith("6655")) text += "│  ★ SIYI v2 format!\n";
+        else if (p.reply_hex.startsWith("eb90")) text += "│  ★ Viewpro format!\n";
+        else if (p.reply_hex.startsWith("fe")) text += "│  ★ MAVLink format!\n";
+        else text += "│  ★ UNKNOWN format — share this hex!\n";
       } else if (p.reply === "no_reply") {
-        text += "  Reply: no reply (normal for fire-and-forget cameras)\n";
+        text += "│  no reply\n";
+      } else if (p.broadcasts !== undefined) {
+        if (p.count > 0) {
+          anyReply = true;
+          text += "│  ✓ Got " + p.count + " broadcast packet(s)!\n";
+          p.broadcasts.forEach(b => {
+            text += "│    from " + b.from + " (" + b.len + "B): " + b.hex + "\n";
+          });
+        } else {
+          text += "│  no broadcasts heard\n";
+        }
+      } else if (p.found) {
+        anyReply = true;
+        text += "│  ✓ HTTP API found!\n";
+        p.found.forEach(h => {
+          text += "│    Port " + h.port + " " + h.path + ":\n";
+          text += "│    " + (h.response_preview || "").split("\n").slice(0, 3).join("\n│    ") + "\n";
+        });
+      } else if (p.reply === "no HTTP on ports 80/8080/8888") {
+        text += "│  no HTTP API found\n";
       } else if (p.error) {
-        text += "  Error: " + p.error + "\n";
+        text += "│  Error: " + p.error + "\n";
+      } else if (p.note) {
+        text += "│  " + p.note + "\n";
       }
-      text += "\n";
+      text += "└─────────────────────\n\n";
     });
 
+    if (anyReply) {
+      text += "★ Camera replied to at least one probe — copy the result above and share it to identify the protocol.\n";
+      showToast("Camera replied! Check probe results.", "success");
+    } else {
+      text += "▸ No replies received.\n";
+      text += "▸ This is NORMAL for fire-and-forget cameras.\n";
+      text += "▸ The center-gimbal command was sent in 5 formats — did the gimbal move?\n";
+      text += "▸ If yes → click \"Enable Real Control\" and use the dashboard normally.\n";
+      text += "▸ If no  → try clicking \"Listen 5 s\" with the camera powered on.\n";
+      showToast("Scan complete — did the gimbal move?", "info");
+    }
+
     box.textContent = text;
-    showToast("Probe complete — check results below", "info");
+  });
+
+  on("btn-listen-conn", "click", async () => {
+    const ip   = document.getElementById("inp-camera-ip")?.value   || "192.168.144.108";
+    const port = parseInt(document.getElementById("inp-control-port")?.value || "37260", 10);
+    const box  = document.getElementById("conn-listen-result");
+    const probeBox = document.getElementById("conn-probe-result");
+    if (probeBox) probeBox.className = "conn-probe-result hidden";
+
+    if (box) {
+      box.textContent = "📻 Listening on UDP port " + port + " for 5 seconds …\n(camera broadcasts status packets continuously on many models)";
+      box.className = "conn-probe-result visible";
+    }
+
+    const r = await apiPost("/api/probe/listen", { camera_ip: ip, control_port: port, wait_seconds: 5 });
+    if (!box) return;
+
+    if (!r.success) {
+      box.textContent = "Error binding port " + port + ": " + r.error + "\n(another process may be using this port)";
+      return;
+    }
+
+    if (r.count === 0) {
+      box.textContent = "📻 Listened " + port + " for 5 s — no packets received.\n\n"
+        + "Possible reasons:\n"
+        + "  • Camera broadcasts on a different port (try 37256, 37258, 14550)\n"
+        + "  • Camera only sends after receiving a query first\n"
+        + "  • Port " + port + " is already bound by another process\n\n"
+        + "Try the Multi-Protocol Scan — it also passively listens and sends query packets.";
+      showToast("No broadcasts heard on port " + port, "info");
+      return;
+    }
+
+    let text = "📻 Got " + r.count + " packet(s) on port " + port + "!\n\n";
+    r.packets.forEach((p, i) => {
+      text += "Packet #" + (i + 1) + " from " + p.from + " (" + p.len + " bytes):\n";
+      text += "  Hex: " + p.hex + "\n";
+      // Try to identify protocol from first bytes
+      const h = p.hex;
+      if (h.startsWith("5566")) text += "  → SIYI v1 format\n";
+      else if (h.startsWith("6655")) text += "  → SIYI v2 format\n";
+      else if (h.startsWith("eb90")) text += "  → Viewpro format\n";
+      else if (h.startsWith("fe"))   text += "  → MAVLink v1\n";
+      else if (h.startsWith("fd"))   text += "  → MAVLink v2\n";
+      else text += "  → Unknown format — share this hex!\n";
+      text += "\n";
+    });
+    box.textContent = text;
+    showToast("Received " + r.count + " packet(s) from camera!", "success");
   });
 }
 

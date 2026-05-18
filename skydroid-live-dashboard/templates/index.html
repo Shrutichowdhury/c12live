@@ -347,14 +347,16 @@
             <input id="inp-control-port" type="number" class="text-input" value="37260" placeholder="37260" />
           </div>
           <div class="conn-field-actions">
-            <button id="btn-test-conn"  class="btn btn-caution">🔌 Test Connection</button>
-            <button id="btn-probe-conn" class="btn btn-toggle"  style="margin-left:8px">🔬 Protocol Probe</button>
+            <button id="btn-test-conn"   class="btn btn-caution">🔌 Test</button>
+            <button id="btn-probe-conn"  class="btn btn-toggle"  style="margin-left:6px">🔬 Multi-Protocol Scan</button>
+            <button id="btn-listen-conn" class="btn btn-toggle"  style="margin-left:6px">📻 Listen 5 s</button>
           </div>
         </div>
 
-        <!-- Test / probe result -->
-        <div id="conn-test-result"  class="conn-test-result  hidden"></div>
-        <div id="conn-probe-result" class="conn-probe-result hidden"></div>
+        <!-- Test / probe / listen results -->
+        <div id="conn-test-result"   class="conn-test-result   hidden"></div>
+        <div id="conn-probe-result"  class="conn-probe-result  hidden"></div>
+        <div id="conn-listen-result" class="conn-probe-result  hidden"></div>
 
         <!-- Instructions -->
         <details class="conn-help">

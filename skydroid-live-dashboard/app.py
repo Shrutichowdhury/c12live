@@ -250,9 +250,10 @@ def api_connection_test():
 @app.route("/api/probe", methods=["POST"])
 def api_probe():
     """
-    Send a SIYI firmware-version query and a raw zero-byte packet to the camera,
-    then return whatever bytes the camera sends back (hex-encoded).
-    Useful for confirming the protocol and camera reachability.
+    Multi-format protocol scanner.  Tries every known protocol variant used
+    by Skydroid / SIYI / Viewpro cameras and returns raw replies.
+    Also sends an actual center-gimbal command in each format so you can see
+    if the gimbal physically moves.
     """
     ip   = (request.json or {}).get("camera_ip",    _config["camera_ip"])
     port = int((request.json or {}).get("control_port", _config["control_port"]))
@@ -260,42 +261,193 @@ def api_probe():
     import services.command_protocol as proto
     results = []
 
-    # Probe 1: SIYI firmware version query (0x01)
+    def udp_probe(name: str, pkt: bytes, listen_sec: float = 1.5) -> dict:
+        """Send pkt over UDP and wait up to listen_sec for any reply."""
+        entry = {"probe": name, "sent_hex": pkt.hex()}
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.settimeout(listen_sec)
+            s.sendto(pkt, (ip, port))
+            try:
+                data, addr = s.recvfrom(4096)
+                entry["reply_hex"] = data.hex()
+                entry["reply_len"] = len(data)
+                entry["reply_from"] = str(addr)
+            except socket.timeout:
+                entry["reply"] = "no_reply"
+            s.close()
+        except OSError as exc:
+            entry["error"] = str(exc)
+        return entry
+
+    # ── 1. SIYI standard — firmware version query ──────────────────────────
+    results.append(udp_probe(
+        "siyi_v1_firmware",
+        proto.build_frame(proto.CMD.FIRMWARE_VERSION, b"", 1),
+    ))
+
+    # ── 2. SIYI standard — gimbal attitude query ───────────────────────────
+    results.append(udp_probe(
+        "siyi_v1_attitude",
+        proto.build_frame(proto.CMD.GIMBAL_ATTITUDE, b"", 2),
+    ))
+
+    # ── 3. SIYI standard — center gimbal (sends actual movement cmd) ───────
+    results.append(udp_probe(
+        "siyi_v1_center",
+        proto.cmd_center_gimbal(3),
+    ))
+
+    # ── 4. SIYI v2 variant — some cameras use 0x6655 instead of 0x5566 ────
+    #       frame: [0x66][0x55][0x01][len16LE][seq16LE][cmd][data][crc16LE]
+    def siyi_v2_frame(cmd_id: int, data: bytes = b"", seq: int = 0) -> bytes:
+        from services.command_protocol import crc16
+        inner = bytes([0x01]) + (len(data)).to_bytes(2, "little") + \
+                seq.to_bytes(2, "little") + bytes([cmd_id]) + data
+        crc = crc16(inner)
+        return bytes([0x66, 0x55]) + inner + crc.to_bytes(2, "little")
+
+    results.append(udp_probe("siyi_v2_firmware", siyi_v2_frame(0x01, b"", 1)))
+    results.append(udp_probe("siyi_v2_center",   siyi_v2_frame(0x0D, b"\x01", 2)))
+
+    # ── 5. Viewpro / ViewLink protocol — magic 0xEB 0x90 ──────────────────
+    #       [0xEB][0x90][addr][cmd][len][data…][checksum]
+    def viewpro_frame(cmd: int, data: bytes = b"") -> bytes:
+        body = bytes([0x01, cmd, len(data)]) + data
+        chk  = sum(body) & 0xFF
+        return bytes([0xEB, 0x90]) + body + bytes([chk])
+
+    results.append(udp_probe("viewpro_query",  viewpro_frame(0x01)))
+    results.append(udp_probe("viewpro_center", viewpro_frame(0x08, b"\x00\x00\x00")))
+
+    # ── 6. MAVLink heartbeat — some cameras respond to MAVLink ─────────────
+    #       HEARTBEAT (msg 0) from GCS (sys 255, comp 190)
+    def mavlink_heartbeat() -> bytes:
+        #  STX  len  seq  sys   comp  msgid  payload (9 bytes for HEARTBEAT)
+        payload = bytes([
+            0x00, 0x00, 0x00, 0x00,   # custom_mode
+            0x06,                      # type=6 (GCS)
+            0x08,                      # autopilot=8 (INVALID/NONE)
+            0x00,                      # base_mode
+            0x04,                      # system_status=4 (ACTIVE)
+            0x03,                      # mavlink_version=3
+        ])
+        seq, sys_id, comp_id, msg_id = 0, 255, 190, 0
+        header = bytes([0xFE, len(payload), seq, sys_id, comp_id, msg_id])
+        crc_extra = 50   # HEARTBEAT CRC_EXTRA
+        import struct
+        crc_data = bytes([len(payload), seq, sys_id, comp_id, msg_id]) + payload + bytes([crc_extra])
+        crc_val = 0xFFFF
+        for b in crc_data:
+            tmp = b ^ (crc_val & 0xFF)
+            tmp = (tmp ^ (tmp << 4)) & 0xFF
+            crc_val = (crc_val >> 8) ^ (tmp << 8) ^ (tmp << 3) ^ (tmp >> 4)
+            crc_val &= 0xFFFF
+        return header + payload + struct.pack("<H", crc_val)
+
+    results.append(udp_probe("mavlink_heartbeat", mavlink_heartbeat(), 2.0))
+
+    # ── 7. Listen passively for camera broadcasts ──────────────────────────
+    #       Many cameras broadcast status on the same port without any query.
+    listen_entry = {"probe": "passive_listen_37260", "note": "waiting 3 s for camera broadcasts"}
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.settimeout(2)
-        frame = proto.build_frame(proto.CMD.FIRMWARE_VERSION, b"", 1)
-        s.sendto(frame, (ip, port))
-        results.append({"probe": "siyi_firmware_query", "sent_hex": frame.hex()})
-        try:
-            data, _ = s.recvfrom(1024)
-            results[-1]["reply_hex"] = data.hex()
-            results[-1]["reply_len"] = len(data)
-        except socket.timeout:
-            results[-1]["reply"] = "no_reply"
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        s.settimeout(3)
+        s.bind(("0.0.0.0", port))
+        broadcasts = []
+        deadline = time.time() + 3
+        while time.time() < deadline:
+            try:
+                data, addr = s.recvfrom(4096)
+                broadcasts.append({"from": str(addr), "hex": data.hex(), "len": len(data)})
+                if len(broadcasts) >= 5:
+                    break
+            except socket.timeout:
+                break
         s.close()
+        listen_entry["broadcasts"] = broadcasts
+        listen_entry["count"] = len(broadcasts)
     except OSError as exc:
-        results.append({"probe": "siyi_firmware_query", "error": str(exc)})
+        listen_entry["error"] = str(exc)
+    results.append(listen_entry)
 
-    # Probe 2: attitude query (0x07)
-    try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.settimeout(2)
-        frame = proto.build_frame(proto.CMD.GIMBAL_ATTITUDE, b"", 2)
-        s.sendto(frame, (ip, port))
-        results.append({"probe": "attitude_query", "sent_hex": frame.hex()})
-        try:
-            data, _ = s.recvfrom(1024)
-            results[-1]["reply_hex"] = data.hex()
-            results[-1]["reply_len"] = len(data)
-        except socket.timeout:
-            results[-1]["reply"] = "no_reply"
-        s.close()
-    except OSError as exc:
-        results.append({"probe": "attitude_query", "error": str(exc)})
+    # ── 8. HTTP API probe — many cameras expose REST on 8080 / 8888 ───────
+    http_results = []
+    for http_port in [8080, 8888, 80]:
+        for path in ["/", "/api/info", "/cgi-bin/param.cgi", "/Status"]:
+            try:
+                cs = socket.create_connection((ip, http_port), timeout=1)
+                req = f"GET {path} HTTP/1.0\r\nHost: {ip}\r\n\r\n".encode()
+                cs.sendall(req)
+                cs.settimeout(1)
+                raw = b""
+                try:
+                    while True:
+                        chunk = cs.recv(512)
+                        if not chunk:
+                            break
+                        raw += chunk
+                        if len(raw) > 2048:
+                            break
+                except Exception:
+                    pass
+                cs.close()
+                if raw:
+                    http_results.append({
+                        "port": http_port, "path": path,
+                        "response_preview": raw[:300].decode("latin-1", errors="replace"),
+                    })
+                    break   # found HTTP on this port
+            except OSError:
+                pass
+        if http_results and http_results[-1].get("port") == http_port:
+            break
 
-    logger.info("Protocol probe to %s:%d complete: %s", ip, port, results)
+    if http_results:
+        results.append({"probe": "http_api", "found": http_results})
+    else:
+        results.append({"probe": "http_api", "reply": "no HTTP on ports 80/8080/8888"})
+
+    logger.info("Multi-protocol probe to %s:%d complete — %d probes", ip, port, len(results))
     return jsonify({"success": True, "ip": ip, "port": port, "probes": results})
+
+
+@app.route("/api/probe/listen", methods=["POST"])
+def api_probe_listen():
+    """
+    Bind to UDP on the given port and collect whatever the camera broadcasts
+    for up to 5 seconds.  Returns raw hex packets.
+    """
+    ip   = (request.json or {}).get("camera_ip",    _config["camera_ip"])
+    port = int((request.json or {}).get("control_port", _config["control_port"]))
+    wait = float((request.json or {}).get("wait_seconds", 5))
+
+    packets = []
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        s.settimeout(wait)
+        s.bind(("0.0.0.0", port))
+        deadline = time.time() + wait
+        while time.time() < deadline:
+            try:
+                data, addr = s.recvfrom(4096)
+                packets.append({
+                    "from": str(addr),
+                    "hex":  data.hex(),
+                    "len":  len(data),
+                    "ascii": data.decode("latin-1", errors="replace"),
+                })
+                if len(packets) >= 20:
+                    break
+            except socket.timeout:
+                break
+        s.close()
+    except OSError as exc:
+        return jsonify({"success": False, "error": str(exc)})
+
+    return jsonify({"success": True, "port": port, "packets": packets, "count": len(packets)})
 
 
 @app.route("/api/start", methods=["POST"])
