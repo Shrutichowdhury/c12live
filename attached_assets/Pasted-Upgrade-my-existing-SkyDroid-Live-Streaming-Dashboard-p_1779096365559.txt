@@ -1,0 +1,403 @@
+Upgrade my existing "SkyDroid Live Streaming Dashboard" project to add complete SkyDroid C12 gimbal and camera control functionality, similar to the official Skydroid Gimbal FPV application.
+
+IMPORTANT:
+
+* Keep all existing live streaming functionality working.
+* Add a modular camera control system.
+* If exact Ethernet command protocol details are not publicly documented, implement a clean command abstraction layer where command bytes can be updated easily later.
+* Include a "Mock Mode" so the dashboard UI works even without the real camera connected.
+* I will run this project locally on my computer on the same network as the C12 camera.
+
+====================================================================
+PROJECT GOAL
+============
+
+Enhance the dashboard to provide:
+
+1. Real-time visible and thermal video.
+2. Full gimbal control.
+3. Camera settings control.
+4. Thermal settings control.
+5. Snapshot and recording control.
+6. Calibration and maintenance tools.
+7. Target tracking placeholders.
+8. Keyboard and joystick control.
+9. Professional DJI-style UI.
+
+====================================================================
+DEVICE INFORMATION
+==================
+
+Camera IP:
+192.168.144.108
+
+RTSP URLs:
+Visible:
+rtsp://192.168.144.108:554/stream=1
+
+Thermal:
+rtsp://192.168.144.108:555/stream=2
+
+Control Transport:
+Ethernet LAN (TCP/UDP command channel)
+
+====================================================================
+NEW PROJECT STRUCTURE
+=====================
+
+Add:
+
+services/
+├── c12_controller.py
+├── command_protocol.py
+├── mock_controller.py
+
+static/
+├── js/
+│   ├── controls.js
+│   └── keyboard.js
+
+====================================================================
+ARCHITECTURE
+============
+
+Create a CameraController interface with methods:
+
+* connect()
+* disconnect()
+* get_status()
+
+Gimbal:
+
+* pitch_up(speed)
+* pitch_down(speed)
+* yaw_left(speed)
+* yaw_right(speed)
+* roll_left(speed)
+* roll_right(speed)
+* stop_motion()
+* center_all()
+* center_yaw()
+* look_down()
+* look_forward()
+
+Zoom:
+
+* zoom_in()
+* zoom_out()
+* set_zoom(level)
+
+Camera:
+
+* take_photo()
+* start_recording()
+* stop_recording()
+
+Tracking:
+
+* enable_tracking()
+* disable_tracking()
+
+Calibration:
+
+* temperature_calibration()
+* horizontal_calibration()
+* vertical_calibration()
+* fine_adjust(roll_offset, pitch_offset)
+
+Working Mode:
+
+* set_hoist_mode()
+* set_upside_down_mode()
+
+Motion Settings:
+
+* set_speed_mode(mode)  # constant or variable
+
+Thermal:
+
+* set_palette(name)
+* set_thermal_gain(mode)
+* set_temperature_measurement(enabled)
+
+Image Settings:
+
+* set_brightness(value)
+* set_contrast(value)
+* set_saturation(value)
+* set_sharpness(value)
+
+System:
+
+* reboot_camera()
+* upgrade_firmware(file_path)
+
+====================================================================
+SUPPORTED THERMAL PALETTES
+==========================
+
+Implement at least these palettes:
+
+* White Hot
+* Black Hot
+* Iron Red
+* Rainbow
+* Arctic
+* Lava
+* Medical
+* Fusion
+* Amber
+* Red Hot
+* Green Hot
+
+====================================================================
+MOCK MODE
+=========
+
+If the real command protocol is not configured:
+
+* Use MockController.
+* Log all commands.
+* Return successful responses.
+* Update simulated state.
+
+This allows the UI to function immediately.
+
+====================================================================
+BACKEND API ENDPOINTS
+=====================
+
+Create REST API endpoints.
+
+Gimbal:
+POST /api/gimbal/pitch_up
+POST /api/gimbal/pitch_down
+POST /api/gimbal/yaw_left
+POST /api/gimbal/yaw_right
+POST /api/gimbal/roll_left
+POST /api/gimbal/roll_right
+POST /api/gimbal/stop
+POST /api/gimbal/center
+POST /api/gimbal/center_yaw
+POST /api/gimbal/look_down
+POST /api/gimbal/look_forward
+
+Zoom:
+POST /api/camera/zoom_in
+POST /api/camera/zoom_out
+POST /api/camera/set_zoom
+
+Camera:
+POST /api/camera/photo
+POST /api/camera/start_recording
+POST /api/camera/stop_recording
+
+Tracking:
+POST /api/tracking/enable
+POST /api/tracking/disable
+
+Calibration:
+POST /api/calibration/temperature
+POST /api/calibration/horizontal
+POST /api/calibration/vertical
+POST /api/calibration/fine_adjust
+
+Thermal:
+POST /api/thermal/set_palette
+POST /api/thermal/set_gain
+POST /api/thermal/temperature_measurement
+
+Image:
+POST /api/image/settings
+
+Mode:
+POST /api/mode/hoist
+POST /api/mode/upside_down
+
+Settings:
+POST /api/speed_mode
+
+Status:
+GET /api/camera/status
+
+====================================================================
+FRONTEND UI REQUIREMENTS
+========================
+
+Add a professional control dashboard with these sections.
+
+1. GIMBAL CONTROL PANEL
+
+* Up, Down, Left, Right directional controls
+* Roll left and roll right buttons
+* Center button
+* Center Yaw button
+* Look Down button
+* Look Forward button
+* Hold-to-move behavior:
+
+  * Mouse down starts motion
+  * Mouse up stops motion
+
+2. KEYBOARD CONTROL
+
+* W = Pitch Up
+* S = Pitch Down
+* A = Yaw Left
+* D = Yaw Right
+* Q = Roll Left
+* E = Roll Right
+* Space = Stop
+* C = Center
+
+3. ZOOM CONTROL
+
+* Zoom In
+* Zoom Out
+* Slider (1x to 4x)
+* Current zoom display
+
+4. CAMERA CONTROL
+
+* Take Photo
+* Start Recording
+* Stop Recording
+* Recording status indicator
+
+5. THERMAL CONTROL
+
+* Palette dropdown
+* Gain mode dropdown
+* Temperature measurement toggle
+
+6. IMAGE SETTINGS
+
+* Brightness slider
+* Contrast slider
+* Saturation slider
+* Sharpness slider
+
+7. CALIBRATION TOOLS
+
+* Temperature Calibration
+* Horizontal Calibration
+* Vertical Calibration
+* Fine Adjust controls
+
+8. WORKING MODE
+
+* Hoist Mode
+* Upside Down Mode
+
+9. SPEED MODE
+
+* Constant Speed
+* Variable Speed
+
+10. STATUS PANEL
+    Show:
+
+* Connected
+* Mock Mode
+* Recording
+* Tracking Enabled
+* Current Palette
+* Current Zoom
+* Last Command
+
+====================================================================
+UI DESIGN
+=========
+
+* DJI/Skydroid inspired design
+* Dark aerospace theme
+* Glassmorphism cards
+* Icon-based controls
+* Smooth animations
+* Fully responsive
+
+====================================================================
+JAVASCRIPT REQUIREMENTS
+=======================
+
+Create controls.js to:
+
+* Call all API endpoints.
+* Handle button press and release.
+* Update UI state.
+* Poll /api/camera/status every second.
+* Display success/error notifications.
+
+Create keyboard.js to:
+
+* Implement keyboard shortcuts.
+* Prevent repeated requests while keys are held.
+
+====================================================================
+COMMAND PROTOCOL LAYER
+======================
+
+Create command_protocol.py with:
+
+* Human-readable command definitions.
+* Placeholder packet builders.
+* Methods:
+
+  * build_command(name, params)
+  * parse_response(data)
+
+Create c12_controller.py:
+
+* TCP or UDP socket communication to 192.168.144.108.
+* Configurable control port.
+* Send packets using command_protocol.py.
+
+If protocol details are unknown:
+
+* Raise NotImplementedError only inside low-level packet functions.
+* Keep all UI and API working through MockController.
+
+====================================================================
+CONFIGURATION
+=============
+
+Add configuration values:
+
+* CAMERA_IP = "192.168.144.108"
+* CONTROL_PORT = 37260 (make configurable)
+* USE_MOCK_CONTROLLER = True by default
+
+====================================================================
+README UPDATES
+==============
+
+Update README with:
+
+* New control features
+* Keyboard shortcuts
+* Mock mode explanation
+* How to switch to real controller
+* How to modify command packets when protocol is known
+
+====================================================================
+QUALITY REQUIREMENTS
+====================
+
+* Keep code modular and clean.
+* Add comments and docstrings.
+* Robust exception handling.
+* Maintain compatibility with the existing streaming dashboard.
+
+====================================================================
+FINAL DELIVERABLE
+=================
+
+Generate all required files and update existing files so the dashboard becomes a complete SkyDroid C12 control center.
+
+The application must:
+
+* Continue streaming visible and thermal video.
+* Provide a fully functional control UI.
+* Work immediately in Mock Mode.
+* Be ready for real Ethernet control by updating command packet definitions later.
+* Run locally in VS Code after downloading from Replit.
