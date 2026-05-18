@@ -27,6 +27,21 @@
   </header>
 
   <!-- ═══════════════════════════════════════════════════════════
+       MOCK MODE BANNER (hidden when real mode is active)
+  ═══════════════════════════════════════════════════════════ -->
+  <div id="mock-banner" class="mock-banner">
+    <span class="mock-banner-icon">⚠</span>
+    <span class="mock-banner-text">
+      <strong>Mock Mode Active</strong> — Gimbal buttons work in the UI but
+      NO commands are sent to the camera. Open <strong>Connection Settings</strong>
+      below to switch to Real Mode.
+    </span>
+    <button class="mock-banner-btn" onclick="document.getElementById('connection-settings').scrollIntoView({behavior:'smooth'})">
+      Go to Settings ↓
+    </button>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
        MAIN CONTENT
   ═══════════════════════════════════════════════════════════ -->
   <main>
@@ -286,7 +301,61 @@
 
     </div><!-- end control-row -->
 
-  </main>
+    <!-- ── Connection Settings ──────────────────────────────── -->
+    <section id="connection-settings" aria-label="Connection Settings">
+      <p class="section-heading">Connection Settings</p>
+      <div class="glass-card conn-card">
+
+        <!-- Mode indicator -->
+        <div class="conn-mode-row">
+          <div id="conn-mode-indicator" class="conn-mode mock">
+            <span class="conn-mode-dot"></span>
+            <span id="conn-mode-label">Mock Mode — commands simulated</span>
+          </div>
+          <div class="conn-mode-actions">
+            <button id="btn-enable-mock"  class="btn btn-toggle">Enable Mock</button>
+            <button id="btn-enable-real"  class="btn btn-success">Enable Real Control</button>
+          </div>
+        </div>
+
+        <hr class="divider" />
+
+        <!-- Config fields -->
+        <div class="conn-fields">
+          <div class="conn-field">
+            <label class="field-label" for="inp-camera-ip">Camera IP</label>
+            <input id="inp-camera-ip" type="text" class="text-input" value="192.168.144.108" placeholder="192.168.144.108" />
+          </div>
+          <div class="conn-field">
+            <label class="field-label" for="inp-control-port">Control Port</label>
+            <input id="inp-control-port" type="number" class="text-input" value="37260" placeholder="37260" />
+          </div>
+          <div class="conn-field-actions">
+            <button id="btn-test-conn" class="btn btn-caution">🔌 Test Connection</button>
+          </div>
+        </div>
+
+        <!-- Test result -->
+        <div id="conn-test-result" class="conn-test-result hidden"></div>
+
+        <!-- Instructions -->
+        <details class="conn-help">
+          <summary class="conn-help-summary">How to enable real gimbal control</summary>
+          <div class="conn-help-body">
+            <ol>
+              <li>Make sure your computer is on the <strong>same network</strong> as the camera (<code>192.168.144.108</code>).</li>
+              <li>Click <strong>Test Connection</strong> to verify the control port is reachable.</li>
+              <li>If the test passes, click <strong>Enable Real Control</strong> — gimbal commands will go directly to the camera.</li>
+              <li>If the test fails, the control port or protocol may differ. Video streaming uses RTSP (ports 554/555) which is separate from the control channel.</li>
+            </ol>
+            <p class="conn-help-note">The exact Ethernet control protocol for the C12 is not publicly documented. If Enable Real Control fails, commands will automatically fall back to Mock Mode.</p>
+          </div>
+        </details>
+
+      </div>
+    </section>
+
+  </main><!-- end main -->
 
   <!-- ═══════════════════════════════════════════════════════════
        FOOTER

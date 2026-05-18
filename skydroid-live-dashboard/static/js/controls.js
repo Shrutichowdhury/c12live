@@ -370,6 +370,93 @@ function capitalize(s) {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
+// ─── Connection settings ──────────────────────────────────────────────────────
+
+async function loadConfig() {
+  const cfg = await apiGet("/api/config");
+  if (!cfg) return;
+  const ip   = document.getElementById("inp-camera-ip");
+  const port = document.getElementById("inp-control-port");
+  if (ip)   ip.value   = cfg.camera_ip    || "192.168.144.108";
+  if (port) port.value = cfg.control_port || 37260;
+  applyModeUI(cfg.mock_mode);
+}
+
+function applyModeUI(isMock) {
+  const banner    = document.getElementById("mock-banner");
+  const indicator = document.getElementById("conn-mode-indicator");
+  const label     = document.getElementById("conn-mode-label");
+  const mockBtn   = document.getElementById("btn-enable-mock");
+  const realBtn   = document.getElementById("btn-enable-real");
+
+  if (banner) banner.classList.toggle("hidden", !isMock);
+  if (indicator) {
+    indicator.className = "conn-mode " + (isMock ? "mock" : "real");
+  }
+  if (label) {
+    label.textContent = isMock
+      ? "Mock Mode — commands simulated, camera NOT controlled"
+      : "Real Mode — commands sent to camera hardware";
+  }
+  if (mockBtn) mockBtn.classList.toggle("btn-active", isMock);
+  if (realBtn) realBtn.classList.toggle("btn-active", !isMock);
+
+  // Update header chip
+  const chip = document.getElementById("status-mock");
+  if (chip) {
+    chip.textContent = isMock ? "Mock Mode" : "Real Mode";
+    chip.className   = "status-chip " + (isMock ? "chip-active" : "chip-inactive");
+  }
+}
+
+function initConnectionSettings() {
+  on("btn-enable-mock", "click", async () => {
+    const r = await apiPost("/api/config", { mock_mode: true });
+    if (r.success) {
+      applyModeUI(true);
+      showToast("Mock Mode enabled — UI only, no camera commands", "info");
+    }
+  });
+
+  on("btn-enable-real", "click", async () => {
+    const ip   = document.getElementById("inp-camera-ip")?.value   || "192.168.144.108";
+    const port = parseInt(document.getElementById("inp-control-port")?.value || "37260", 10);
+    showToast("Connecting to " + ip + ":" + port + " …", "info");
+    const r = await apiPost("/api/config", { mock_mode: false, camera_ip: ip, control_port: port });
+    if (r.success) {
+      applyModeUI(r.mock_mode);
+      if (r.mock_mode) {
+        showToast("⚠ Could not reach camera — still in Mock Mode", "error");
+      } else {
+        showToast("✓ Real Mode active — commands go to " + ip, "success");
+      }
+    }
+  });
+
+  on("btn-test-conn", "click", async () => {
+    const ip   = document.getElementById("inp-camera-ip")?.value   || "192.168.144.108";
+    const port = parseInt(document.getElementById("inp-control-port")?.value || "37260", 10);
+    const result = document.getElementById("conn-test-result");
+
+    if (result) {
+      result.textContent = "Testing " + ip + ":" + port + " …";
+      result.className = "conn-test-result";
+    }
+
+    const r = await apiPost("/api/connection/test", { camera_ip: ip, control_port: port });
+    if (!result) return;
+    if (r.reachable) {
+      result.className = "conn-test-result reachable";
+      result.textContent = "✓ Reachable — port " + port + " is open on " + ip
+        + ". Click \"Enable Real Control\" to activate.";
+    } else {
+      result.className = "conn-test-result unreachable";
+      result.textContent = "✗ Not reachable — " + (r.error || "connection refused")
+        + ". Check the camera IP, port, and network connection.";
+    }
+  });
+}
+
 // ─── Bootstrap ───────────────────────────────────────────────────────────────
 
 function init() {
@@ -383,6 +470,8 @@ function init() {
   initWorkingMode();
   initSpeedMode();
   initTracking();
+  initConnectionSettings();
+  loadConfig();
   // Polling is started by app.js once this file is loaded.
 }
 

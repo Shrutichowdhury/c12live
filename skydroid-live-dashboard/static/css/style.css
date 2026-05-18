@@ -783,6 +783,197 @@ main {
 .mt     { margin-top: 14px; }
 .mt-btn { margin-top: 10px; width: 100%; }
 
+/* --- Mock Mode Banner ----------------------------------- */
+.mock-banner {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: rgba(217,119,6,0.14);
+  border-bottom: 2px solid rgba(251,191,36,0.5);
+  padding: 12px 28px;
+  flex-wrap: wrap;
+}
+
+.mock-banner-icon {
+  font-size: 1.2rem;
+  flex-shrink: 0;
+}
+
+.mock-banner-text {
+  flex: 1;
+  font-size: 0.82rem;
+  color: #fde68a;
+  line-height: 1.5;
+  min-width: 200px;
+}
+
+.mock-banner-btn {
+  padding: 6px 16px;
+  background: rgba(251,191,36,0.15);
+  border: 1px solid rgba(251,191,36,0.4);
+  border-radius: var(--radius-xs);
+  color: #fbbf24;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s;
+  flex-shrink: 0;
+}
+
+.mock-banner-btn:hover { background: rgba(251,191,36,0.25); }
+
+.mock-banner.hidden { display: none; }
+
+/* --- Connection Settings -------------------------------- */
+.conn-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.conn-mode-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.conn-mode {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px;
+  border-radius: var(--radius-xs);
+  font-size: 0.82rem;
+  font-weight: 700;
+  border: 1px solid transparent;
+}
+
+.conn-mode.mock {
+  background: rgba(217,119,6,0.14);
+  border-color: rgba(251,191,36,0.4);
+  color: #fbbf24;
+}
+
+.conn-mode.real {
+  background: rgba(34,197,94,0.14);
+  border-color: rgba(34,197,94,0.4);
+  color: #86efac;
+}
+
+.conn-mode-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: pulse 1.5s infinite;
+}
+
+.conn-mode-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.conn-fields {
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.conn-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 160px;
+}
+
+.conn-field-actions {
+  display: flex;
+  align-items: flex-end;
+  padding-bottom: 0;
+}
+
+.text-input {
+  padding: 8px 12px;
+  background: var(--bg-card-alt);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-xs);
+  color: var(--text-prim);
+  font-size: 0.82rem;
+  font-family: "Segoe UI", system-ui, monospace;
+  outline: none;
+  transition: border-color 0.15s;
+  width: 100%;
+}
+
+.text-input:focus { border-color: var(--accent); }
+
+.conn-test-result {
+  padding: 10px 14px;
+  border-radius: var(--radius-xs);
+  font-size: 0.82rem;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.conn-test-result.reachable {
+  background: rgba(34,197,94,0.12);
+  border: 1px solid rgba(34,197,94,0.35);
+  color: #86efac;
+}
+
+.conn-test-result.unreachable {
+  background: rgba(239,68,68,0.12);
+  border: 1px solid rgba(239,68,68,0.35);
+  color: #fca5a5;
+}
+
+.conn-test-result.hidden { display: none; }
+
+.conn-help {
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+
+.conn-help-summary {
+  font-size: 0.78rem;
+  color: var(--text-sec);
+  cursor: pointer;
+  user-select: none;
+  font-weight: 600;
+}
+
+.conn-help-body {
+  margin-top: 10px;
+  font-size: 0.78rem;
+  color: var(--text-sec);
+  line-height: 1.7;
+  padding-left: 4px;
+}
+
+.conn-help-body ol {
+  margin-left: 18px;
+  margin-bottom: 8px;
+}
+
+.conn-help-body code {
+  background: var(--bg-card-alt);
+  border: 1px solid var(--border-light);
+  border-radius: 3px;
+  padding: 1px 5px;
+  font-size: 0.75rem;
+}
+
+.conn-help-note {
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  margin-top: 6px;
+}
+
 /* --- Footer --------------------------------------------- */
 footer {
   background: var(--bg-card);

@@ -12,6 +12,7 @@ NOTE: For live video the camera at 192.168.144.108 must be reachable.
 """
 
 import time
+import socket
 import logging
 from flask import Flask, Response, jsonify, render_template, request
 from flask_cors import CORS
@@ -28,32 +29,47 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Configuration
+# Runtime configuration (can be changed via /api/config at runtime)
 # ---------------------------------------------------------------------------
-CAMERA_IP          = "192.168.144.108"
-CONTROL_PORT       = 37260          # Configurable control port
-USE_MOCK_CONTROLLER = True          # Set False to use real C12Controller
+_config = {
+    "camera_ip":    "192.168.144.108",
+    "control_port": 37260,
+    "mock_mode":    True,   # Start in mock mode; user can disable from the UI
+}
 
-VISIBLE_RTSP = f"rtsp://{CAMERA_IP}:554/stream=1"
-THERMAL_RTSP = f"rtsp://{CAMERA_IP}:555/stream=2"
+VISIBLE_RTSP = f"rtsp://{_config['camera_ip']}:554/stream=1"
+THERMAL_RTSP = f"rtsp://{_config['camera_ip']}:555/stream=2"
 
 # ---------------------------------------------------------------------------
-# Controller selection
+# Controller factory
 # ---------------------------------------------------------------------------
-if USE_MOCK_CONTROLLER:
-    from services.mock_controller import MockController
-    controller = MockController()
-    logger.info("Running in MOCK MODE — no real camera commands will be sent.")
-else:
-    from services.c12_controller import C12Controller
-    controller = C12Controller(CAMERA_IP, CONTROL_PORT)
-    result = controller.connect()
-    if result.get("success"):
-        logger.info("Connected to C12 at %s:%d", CAMERA_IP, CONTROL_PORT)
-    else:
-        logger.warning("Could not connect to C12: %s — falling back to MockController", result.get("error"))
-        from services.mock_controller import MockController
-        controller = MockController()
+from services.mock_controller import MockController
+from services.c12_controller   import C12Controller
+
+
+def _make_controller(mock: bool, ip: str, port: int):
+    """Instantiate the appropriate controller and connect if real."""
+    if mock:
+        c = MockController()
+        logger.info("Controller: MOCK MODE — commands are simulated, no data sent to camera.")
+        return c, True
+    # Try real controller
+    c = C12Controller(ip, port)
+    res = c.connect()
+    if res.get("success"):
+        logger.info("Controller: connected to C12 at %s:%d", ip, port)
+        return c, False
+    # Connection failed — fall back to mock
+    logger.warning(
+        "Controller: could NOT connect to %s:%d (%s) — falling back to MOCK MODE.",
+        ip, port, res.get("error", "unknown error"),
+    )
+    return MockController(), True
+
+
+controller, _active_mock = _make_controller(
+    _config["mock_mode"], _config["camera_ip"], _config["control_port"]
+)
 
 # ---------------------------------------------------------------------------
 # Flask app
@@ -135,7 +151,7 @@ def api_status():
         "visible_fps": visible_stream.get_fps(),
         "thermal_fps": thermal_stream.get_fps(),
         "uptime_seconds": uptime,
-        "mock_mode": cam_status.get("mock_mode", USE_MOCK_CONTROLLER),
+        "mock_mode": _active_mock,
         "recording": cam_status.get("recording", False),
         "tracking": cam_status.get("tracking", False),
         "zoom": cam_status.get("zoom", 1.0),
@@ -150,6 +166,62 @@ def api_status():
 # ---------------------------------------------------------------------------
 # Stream control (existing)
 # ---------------------------------------------------------------------------
+
+@app.route("/api/config", methods=["GET"])
+def api_config_get():
+    """Return current runtime configuration."""
+    return jsonify({
+        "camera_ip":    _config["camera_ip"],
+        "control_port": _config["control_port"],
+        "mock_mode":    _active_mock,
+    })
+
+
+@app.route("/api/config", methods=["POST"])
+def api_config_set():
+    """
+    Update runtime configuration and reinitialise the controller.
+    Body: { "camera_ip": "...", "control_port": 37260, "mock_mode": false }
+    """
+    global controller, _active_mock, _config
+    body = request.json or {}
+
+    if "camera_ip"    in body: _config["camera_ip"]    = str(body["camera_ip"])
+    if "control_port" in body: _config["control_port"] = int(body["control_port"])
+    if "mock_mode"    in body: _config["mock_mode"]    = bool(body["mock_mode"])
+
+    # Re-instantiate controller with new settings
+    controller, _active_mock = _make_controller(
+        _config["mock_mode"], _config["camera_ip"], _config["control_port"]
+    )
+    logger.info("Config updated → %s (mock=%s)", _config, _active_mock)
+    return jsonify({
+        "success":      True,
+        "mock_mode":    _active_mock,
+        "camera_ip":    _config["camera_ip"],
+        "control_port": _config["control_port"],
+    })
+
+
+@app.route("/api/connection/test", methods=["POST"])
+def api_connection_test():
+    """
+    Try a plain TCP connection to the camera control port (2-second timeout).
+    Returns reachable=True/False so the UI can tell the user whether
+    the control channel is accessible before switching out of mock mode.
+    """
+    ip   = (request.json or {}).get("camera_ip",    _config["camera_ip"])
+    port = (request.json or {}).get("control_port", _config["control_port"])
+    try:
+        s = socket.create_connection((ip, int(port)), timeout=2)
+        s.close()
+        logger.info("Connection test %s:%s — reachable", ip, port)
+        return jsonify({"success": True,  "reachable": True,  "ip": ip, "port": port})
+    except OSError as exc:
+        logger.warning("Connection test %s:%s — NOT reachable: %s", ip, port, exc)
+        return jsonify({"success": True,  "reachable": False, "ip": ip, "port": port,
+                        "error": str(exc)})
+
 
 @app.route("/api/start", methods=["POST"])
 def api_start():
