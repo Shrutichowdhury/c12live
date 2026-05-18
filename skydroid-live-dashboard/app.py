@@ -206,21 +206,96 @@ def api_config_set():
 @app.route("/api/connection/test", methods=["POST"])
 def api_connection_test():
     """
-    Try a plain TCP connection to the camera control port (2-second timeout).
-    Returns reachable=True/False so the UI can tell the user whether
-    the control channel is accessible before switching out of mock mode.
+    Try both UDP and TCP to the camera control port (2-second timeout each).
+    Returns reachable=True/False plus which transport succeeded.
     """
     ip   = (request.json or {}).get("camera_ip",    _config["camera_ip"])
-    port = (request.json or {}).get("control_port", _config["control_port"])
+    port = int((request.json or {}).get("control_port", _config["control_port"]))
+
+    # --- UDP probe first ---
     try:
-        s = socket.create_connection((ip, int(port)), timeout=2)
+        import services.command_protocol as proto
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.settimeout(2)
+        probe = proto.build_frame(proto.CMD.FIRMWARE_VERSION, b"", 0)
+        s.sendto(probe, (ip, port))
+        try:
+            data, _ = s.recvfrom(1024)
+            s.close()
+            logger.info("Connection test UDP %s:%d — reachable, got %d bytes", ip, port, len(data))
+            return jsonify({"success": True, "reachable": True, "transport": "udp",
+                            "reply_hex": data.hex(), "ip": ip, "port": port})
+        except socket.timeout:
+            # No reply over UDP — port may still be open (fire-and-forget cameras)
+            s.close()
+            logger.info("Connection test UDP %s:%d — probe sent, no reply (normal for some cameras)", ip, port)
+            # Fall through to TCP to confirm reachability
+        except OSError:
+            s.close()
+    except Exception as exc:
+        logger.warning("UDP probe exception: %s", exc)
+
+    # --- TCP fallback ---
+    try:
+        s = socket.create_connection((ip, port), timeout=2)
         s.close()
-        logger.info("Connection test %s:%s — reachable", ip, port)
-        return jsonify({"success": True,  "reachable": True,  "ip": ip, "port": port})
+        logger.info("Connection test TCP %s:%d — reachable", ip, port)
+        return jsonify({"success": True, "reachable": True, "transport": "tcp", "ip": ip, "port": port})
     except OSError as exc:
-        logger.warning("Connection test %s:%s — NOT reachable: %s", ip, port, exc)
-        return jsonify({"success": True,  "reachable": False, "ip": ip, "port": port,
+        logger.warning("Connection test %s:%d — NOT reachable: %s", ip, port, exc)
+        return jsonify({"success": True, "reachable": False, "ip": ip, "port": port,
                         "error": str(exc)})
+
+
+@app.route("/api/probe", methods=["POST"])
+def api_probe():
+    """
+    Send a SIYI firmware-version query and a raw zero-byte packet to the camera,
+    then return whatever bytes the camera sends back (hex-encoded).
+    Useful for confirming the protocol and camera reachability.
+    """
+    ip   = (request.json or {}).get("camera_ip",    _config["camera_ip"])
+    port = int((request.json or {}).get("control_port", _config["control_port"]))
+
+    import services.command_protocol as proto
+    results = []
+
+    # Probe 1: SIYI firmware version query (0x01)
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.settimeout(2)
+        frame = proto.build_frame(proto.CMD.FIRMWARE_VERSION, b"", 1)
+        s.sendto(frame, (ip, port))
+        results.append({"probe": "siyi_firmware_query", "sent_hex": frame.hex()})
+        try:
+            data, _ = s.recvfrom(1024)
+            results[-1]["reply_hex"] = data.hex()
+            results[-1]["reply_len"] = len(data)
+        except socket.timeout:
+            results[-1]["reply"] = "no_reply"
+        s.close()
+    except OSError as exc:
+        results.append({"probe": "siyi_firmware_query", "error": str(exc)})
+
+    # Probe 2: attitude query (0x07)
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.settimeout(2)
+        frame = proto.build_frame(proto.CMD.GIMBAL_ATTITUDE, b"", 2)
+        s.sendto(frame, (ip, port))
+        results.append({"probe": "attitude_query", "sent_hex": frame.hex()})
+        try:
+            data, _ = s.recvfrom(1024)
+            results[-1]["reply_hex"] = data.hex()
+            results[-1]["reply_len"] = len(data)
+        except socket.timeout:
+            results[-1]["reply"] = "no_reply"
+        s.close()
+    except OSError as exc:
+        results.append({"probe": "attitude_query", "error": str(exc)})
+
+    logger.info("Protocol probe to %s:%d complete: %s", ip, port, results)
+    return jsonify({"success": True, "ip": ip, "port": port, "probes": results})
 
 
 @app.route("/api/start", methods=["POST"])

@@ -1,79 +1,42 @@
 # SkyDroid C12 Control Center
 
 A professional web dashboard for the **SkyDroid C12** gimbal camera.
-Streams live visible and thermal video, and provides full gimbal/camera
-control via a DJI-style dark UI — including Mock Mode so everything
-works immediately without a real camera connected.
+Streams live visible and thermal video and provides full gimbal/camera
+control via a DJI-style dark UI — with Mock Mode so the UI works
+without any hardware connected.
 
 ---
 
-## Features
+## Important: must run locally
 
-- Live MJPEG streaming — visible light + thermal (RTSP via OpenCV)
-- Automatic stream reconnection with offline placeholder
-- **Full gimbal control** — pitch, yaw, roll, presets (center, look down…)
-- **Zoom control** — buttons + slider (1×–4×)
-- **Camera capture** — photo, start/stop recording with live indicator
-- **Thermal settings** — 11 palettes, gain mode, temperature measurement toggle
-- **Image settings** — brightness, contrast, saturation, sharpness sliders
-- **Calibration tools** — temperature, horizontal, vertical, fine adjust
-- **Working modes** — Normal, Hoist, Upside-Down
-- **Speed modes** — Constant / Variable
-- **Target tracking** — enable/disable (placeholder for real tracking)
-- **Keyboard control** — W A S D Q E + Space + C + Z X (see below)
-- **Mock Mode** — fully functional UI without real hardware
-- **Real C12 controller** scaffold — ready for protocol implementation
-- Dark aerospace theme with glassmorphism cards
-- Fully responsive layout
+The camera is at `192.168.144.108` — a private LAN address.
+**This server must run on a computer that is on the same network as the camera.**
+Cloud-hosted environments (Replit preview, etc.) cannot reach private IP addresses.
 
 ---
 
-## Folder Structure
+## Quick start (local)
 
+### Windows
 ```
-skydroid-live-dashboard/
-├── app.py                      # Flask entry point, all API routes
-├── requirements.txt
-├── README.md
-├── services/
-│   ├── __init__.py
-│   ├── stream_manager.py       # RTSP capture, MJPEG, FPS, reconnect
-│   ├── command_protocol.py     # Command definitions & packet builder scaffold
-│   ├── mock_controller.py      # Full in-memory mock — works without camera
-│   └── c12_controller.py      # Real TCP controller (fill in protocol later)
-├── templates/
-│   └── index.html              # Dashboard UI
-├── static/
-│   ├── css/style.css           # DJI-inspired dark theme
-│   └── js/
-│       ├── app.js              # Stream status polling & stream controls
-│       ├── controls.js         # All camera/gimbal/thermal API calls
-│       └── keyboard.js         # Keyboard & hold-to-move shortcuts
-└── snapshots/                  # Reserved for snapshot saves
+Double-click  run_local.bat
 ```
+Opens a terminal, creates a Python virtual environment, installs dependencies,
+and starts the server on `http://localhost:5000`.
 
----
-
-## Installation
-
-> **Requirements:** Python 3.11+, same local network as the C12 camera.
-
+### macOS / Linux
 ```bash
-# 1. Navigate to the project folder
+chmod +x run_local.sh
+./run_local.sh
+```
+
+### Manual
+```bash
 cd skydroid-live-dashboard
-
-# 2. Create and activate a virtual environment
 python -m venv venv
-
-# Windows:
-venv\Scripts\activate
-# Linux / macOS:
-source venv/bin/activate
-
-# 3. Install dependencies
+# Windows:  venv\Scripts\activate
+# Mac/Linux: source venv/bin/activate
 pip install -r requirements.txt
-
-# 4. Run
 python app.py
 ```
 
@@ -81,30 +44,59 @@ Open **http://localhost:5000** in your browser.
 
 ---
 
-## Mock Mode (default)
+## Enabling real gimbal control
 
-By default `USE_MOCK_CONTROLLER = True` in `app.py`.  
-In Mock Mode:
+1. Start the server locally (see above).
+2. Scroll to **Connection Settings** in the dashboard.
+3. Click **Test Connection** — green means the control port is reachable.
+4. Click **Protocol Probe** — sends two SIYI-format packets and shows
+   any raw bytes the camera replies with.
+   - If the reply starts with `5566` the protocol is confirmed.
+5. Click **Enable Real Control** — commands go directly to the camera.
 
-- All gimbal/camera API calls are accepted and logged.
-- State is tracked in memory (zoom, palette, recording, etc.).
-- The status panel updates in real time.
-- No real camera or network connection is needed.
-- Keyboard shortcuts and hold-to-move all work normally.
-
-**To switch to real hardware**, set `USE_MOCK_CONTROLLER = False` in `app.py`:
-
-```python
-USE_MOCK_CONTROLLER = False   # line ~20 in app.py
-```
-
-The app will attempt a TCP connection to `CAMERA_IP:CONTROL_PORT`.
-If the connection fails it automatically falls back to MockController
-and logs a warning.
+If the connection test times out, check:
+- Your PC is on the same LAN as `192.168.144.108`
+- The camera is powered and the Ethernet cable / Wi-Fi bridge is connected
+- No firewall is blocking UDP port 37260
 
 ---
 
-## Keyboard Shortcuts
+## Protocol
+
+The C12 uses a **SIYI SDK-compatible binary protocol** over UDP port 37260.
+
+Frame format:
+```
+[0x55][0x66][CTRL][LEN_L][LEN_H][SEQ_L][SEQ_H][CMD_ID][DATA…][CRC_L][CRC_H]
+```
+- CRC: CRC-16/IBM (ARC), polynomial 0x8005, reflected in/out
+- CTRL: 0x01 = request
+
+All packet builders are in `services/command_protocol.py`.
+The controller is in `services/c12_controller.py` (UDP with TCP fallback).
+
+---
+
+## Features
+
+- Live MJPEG streaming — visible light + thermal (RTSP via OpenCV)
+- Automatic stream reconnection with offline placeholder
+- **Full gimbal control** — pitch, yaw, roll, presets
+- **Zoom control** — buttons + slider (1×–30×)
+- **Camera capture** — photo, start/stop recording
+- **Thermal settings** — 11 palettes, gain mode, temperature measurement
+- **Image settings** — brightness, contrast, saturation, sharpness
+- **Calibration tools** — temperature, horizontal, vertical, fine adjust
+- **Working modes** — Normal, Hoist, Upside-Down
+- **Speed modes** — Constant / Variable
+- **Target tracking** toggle
+- **Keyboard shortcuts** — W A S D Q E + Space + C + Z X (press `?`)
+- **Mock Mode** — full UI simulation without any hardware
+- **Connection Settings** panel — Test / Probe / enable Real Mode at runtime
+
+---
+
+## Keyboard shortcuts
 
 | Key | Action |
 |-----|--------|
@@ -119,87 +111,42 @@ and logs a warning.
 | `Z` | Zoom In |
 | `X` | Zoom Out |
 | `?` | Toggle shortcut overlay |
-| `Esc` | Close overlay |
-
-Hold any directional key for continuous motion. Releasing the last held key
-automatically sends a Stop command.
 
 ---
 
-## Configuration
+## RTSP stream URLs
 
-Edit these constants near the top of `app.py`:
-
-```python
-CAMERA_IP           = "192.168.144.108"
-CONTROL_PORT        = 37260       # TCP control port (adjust if different)
-USE_MOCK_CONTROLLER = True        # False = real C12 via Ethernet
-```
-
----
-
-## How to Implement the Real Command Protocol
-
-When you obtain the Ethernet protocol documentation for the C12:
-
-1. Open `services/command_protocol.py`.
-2. Fill in `build_command(name, params)` with real packet framing
-   (header, command ID, payload, checksum).
-3. Fill in `parse_response(data)` to decode the camera's reply.
-4. Set `USE_MOCK_CONTROLLER = False` in `app.py`.
-5. All 40+ API endpoints will immediately use the real hardware.
-
-Everything else — the Flask routes, the UI, the JavaScript — stays
-unchanged. The command names in `COMMANDS` map 1:1 to the methods
-in both `MockController` and `C12Controller`.
-
----
-
-## API Endpoints
-
-### Stream
-| Method | Route | Description |
-|--------|-------|-------------|
-| GET | `/` | Dashboard page |
-| GET | `/video/visible` | MJPEG — visible camera |
-| GET | `/video/thermal` | MJPEG — thermal camera |
-| GET | `/api/status` | Combined stream + camera status |
-| POST | `/api/start` | Start streams |
-| POST | `/api/stop` | Stop streams |
-
-### Gimbal
-`POST /api/gimbal/{pitch_up, pitch_down, yaw_left, yaw_right, roll_left, roll_right, stop, center, center_yaw, look_down, look_forward}`
-
-### Zoom
-`POST /api/camera/{zoom_in, zoom_out, set_zoom}`  Body: `{"level": 2.0}`
-
-### Camera Capture
-`POST /api/camera/{photo, start_recording, stop_recording}`
-
-### Thermal
-`POST /api/thermal/{set_palette, set_gain, temperature_measurement}`
-
-### Image
-`POST /api/image/settings`  Body: `{"brightness":50, "contrast":50, ...}`
-
-### Calibration
-`POST /api/calibration/{temperature, horizontal, vertical, fine_adjust}`
-
-### Mode & Speed
-`POST /api/mode/{hoist, upside_down}`  
-`POST /api/speed_mode`  Body: `{"mode": "constant"}`
-
-### Tracking
-`POST /api/tracking/{enable, disable}`
-
----
-
-## RTSP URLs
-
-| Camera | URL |
-|--------|-----|
+| Camera  | URL |
+|---------|-----|
 | Visible | `rtsp://192.168.144.108:554/stream=1` |
 | Thermal | `rtsp://192.168.144.108:555/stream=2` |
+
+---
+
+## Folder structure
+
+```
+skydroid-live-dashboard/
+├── app.py                      # Flask entry point, 40+ REST endpoints
+├── requirements.txt
+├── run_local.bat               # Windows one-click launcher
+├── run_local.sh                # macOS/Linux one-click launcher
+├── README.md
+├── services/
+│   ├── stream_manager.py       # RTSP capture, MJPEG, FPS, reconnect
+│   ├── command_protocol.py     # SIYI binary protocol: frame builder, CRC, cmd helpers
+│   ├── mock_controller.py      # Full in-memory mock — no camera needed
+│   └── c12_controller.py       # Real controller — UDP (TCP fallback), SIYI frames
+├── templates/
+│   └── index.html              # Dashboard UI
+├── static/
+│   ├── css/style.css
+│   └── js/
+│       ├── app.js
+│       ├── controls.js         # All API calls incl. connection settings
+│       └── keyboard.js
+└── snapshots/
+```
 
 ---
 
@@ -207,9 +154,8 @@ in both `MockController` and `C12Controller`.
 
 | Problem | Solution |
 |---------|----------|
-| Streams show "Offline" | Ensure your PC is on the same network as `192.168.144.108`. Ping it first. |
-| `pip install opencv-python` fails | Try `opencv-python-headless` instead. |
-| Port 5000 in use | Change `app.run(port=5001, ...)` in `app.py` |
-| Low FPS | Check network bandwidth / Wi-Fi signal. |
-| Replit Preview shows offline | Expected — Replit can't reach your local camera. Run locally. |
-| Controller error in logs | Check `CAMERA_IP` and `CONTROL_PORT` in `app.py`. Mock Mode will activate automatically on failure. |
+| "Not reachable" on Test Connection | Run the server locally, not in Replit cloud |
+| Streams show "Offline" | Ensure your PC is on the same LAN as `192.168.144.108` |
+| Gimbal moves in Mock Mode but not real | Protocol Probe — check reply bytes; try other UDP ports (14550, 8554) |
+| `pip install opencv-python` fails | The `requirements.txt` uses `opencv-python-headless` (no GUI) |
+| Port 5000 in use | Change the port in the last line of `app.py` |

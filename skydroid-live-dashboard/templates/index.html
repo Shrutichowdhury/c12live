@@ -306,6 +306,22 @@
       <p class="section-heading">Connection Settings</p>
       <div class="glass-card conn-card">
 
+        <!-- Local-only notice -->
+        <div class="local-only-notice">
+          <span class="local-only-icon">🖥</span>
+          <div>
+            <strong>Must run locally</strong> — this server needs to run on a computer
+            that is on the <strong>same LAN</strong> as the camera (<code>192.168.144.108</code>).
+            Cloud/Replit preview can never reach your camera's private IP.
+            <br>
+            Download the project and run <code>run_local.bat</code> (Windows) or
+            <code>./run_local.sh</code> (Mac/Linux), then open
+            <code>http://localhost:5000</code>.
+          </div>
+        </div>
+
+        <hr class="divider" />
+
         <!-- Mode indicator -->
         <div class="conn-mode-row">
           <div id="conn-mode-indicator" class="conn-mode mock">
@@ -320,7 +336,7 @@
 
         <hr class="divider" />
 
-        <!-- Config fields -->
+        <!-- Config fields + test/probe buttons -->
         <div class="conn-fields">
           <div class="conn-field">
             <label class="field-label" for="inp-camera-ip">Camera IP</label>
@@ -331,24 +347,32 @@
             <input id="inp-control-port" type="number" class="text-input" value="37260" placeholder="37260" />
           </div>
           <div class="conn-field-actions">
-            <button id="btn-test-conn" class="btn btn-caution">🔌 Test Connection</button>
+            <button id="btn-test-conn"  class="btn btn-caution">🔌 Test Connection</button>
+            <button id="btn-probe-conn" class="btn btn-toggle"  style="margin-left:8px">🔬 Protocol Probe</button>
           </div>
         </div>
 
-        <!-- Test result -->
-        <div id="conn-test-result" class="conn-test-result hidden"></div>
+        <!-- Test / probe result -->
+        <div id="conn-test-result"  class="conn-test-result  hidden"></div>
+        <div id="conn-probe-result" class="conn-probe-result hidden"></div>
 
         <!-- Instructions -->
         <details class="conn-help">
-          <summary class="conn-help-summary">How to enable real gimbal control</summary>
+          <summary class="conn-help-summary">Steps to get real gimbal control working</summary>
           <div class="conn-help-body">
             <ol>
-              <li>Make sure your computer is on the <strong>same network</strong> as the camera (<code>192.168.144.108</code>).</li>
-              <li>Click <strong>Test Connection</strong> to verify the control port is reachable.</li>
-              <li>If the test passes, click <strong>Enable Real Control</strong> — gimbal commands will go directly to the camera.</li>
-              <li>If the test fails, the control port or protocol may differ. Video streaming uses RTSP (ports 554/555) which is separate from the control channel.</li>
+              <li>Download the <code>skydroid-live-dashboard/</code> folder to a PC on the same network as the camera.</li>
+              <li>Double-click <code>run_local.bat</code> (Windows) or run <code>./run_local.sh</code> (Mac/Linux) — it installs Python deps and starts the server automatically.</li>
+              <li>Open <code>http://localhost:5000</code> in your browser.</li>
+              <li>Click <strong>Test Connection</strong> — if green, the control port is reachable.</li>
+              <li>Click <strong>Protocol Probe</strong> — sends two SIYI-format packets and shows any raw bytes the camera replies with.</li>
+              <li>Click <strong>Enable Real Control</strong> — gimbal commands will go directly to the camera using the SIYI binary protocol (the standard for this camera family).</li>
             </ol>
-            <p class="conn-help-note">The exact Ethernet control protocol for the C12 is not publicly documented. If Enable Real Control fails, commands will automatically fall back to Mock Mode.</p>
+            <p class="conn-help-note">
+              The C12 uses a SIYI SDK-compatible binary protocol over UDP port 37260.
+              If the probe shows replies starting with <code>5566</code>, the protocol is confirmed and real control will work immediately.
+              If not, share the probe output and we can tune the packet format.
+            </p>
           </div>
         </details>
 

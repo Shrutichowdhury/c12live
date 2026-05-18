@@ -447,13 +447,48 @@ function initConnectionSettings() {
     if (!result) return;
     if (r.reachable) {
       result.className = "conn-test-result reachable";
-      result.textContent = "✓ Reachable — port " + port + " is open on " + ip
-        + ". Click \"Enable Real Control\" to activate.";
+      result.textContent = "✓ Reachable via " + (r.transport || "network") + " — port "
+        + port + " is open on " + ip + ". Click \"Enable Real Control\" to activate."
+        + (r.reply_hex ? "  Camera replied: " + r.reply_hex : "");
     } else {
       result.className = "conn-test-result unreachable";
       result.textContent = "✗ Not reachable — " + (r.error || "connection refused")
-        + ". Check the camera IP, port, and network connection.";
+        + ".  This server must run locally on the same network as the camera.";
     }
+  });
+
+  on("btn-probe-conn", "click", async () => {
+    const ip   = document.getElementById("inp-camera-ip")?.value   || "192.168.144.108";
+    const port = parseInt(document.getElementById("inp-control-port")?.value || "37260", 10);
+    const box  = document.getElementById("conn-probe-result");
+
+    if (box) {
+      box.textContent = "Sending SIYI protocol probes to " + ip + ":" + port + " …";
+      box.className = "conn-probe-result";
+    }
+
+    const r = await apiPost("/api/probe", { camera_ip: ip, control_port: port });
+    if (!box) return;
+    box.className = "conn-probe-result visible";
+
+    let text = "Protocol probe results (" + ip + ":" + port + ")\n\n";
+    (r.probes || []).forEach(p => {
+      text += "  Probe: " + p.probe + "\n";
+      text += "  Sent: " + (p.sent_hex || "–") + "\n";
+      if (p.reply_hex) {
+        text += "  Reply (" + p.reply_len + " bytes): " + p.reply_hex + "\n";
+        const startsWithSiyi = p.reply_hex.startsWith("5566");
+        text += "  Protocol: " + (startsWithSiyi ? "✓ SIYI format confirmed!" : "? Unknown — share this hex to decode") + "\n";
+      } else if (p.reply === "no_reply") {
+        text += "  Reply: no reply (normal for fire-and-forget cameras)\n";
+      } else if (p.error) {
+        text += "  Error: " + p.error + "\n";
+      }
+      text += "\n";
+    });
+
+    box.textContent = text;
+    showToast("Probe complete — check results below", "info");
   });
 }
 
