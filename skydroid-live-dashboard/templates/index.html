@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>SkyDroid Live Streaming Dashboard</title>
+  <title>SkyDroid C12 — Control Dashboard</title>
   <link rel="stylesheet" href="/static/css/style.css" />
 </head>
 <body>
@@ -12,9 +12,18 @@
        HEADER
   ═══════════════════════════════════════════════════════════ -->
   <header>
-    <div class="header-icon">🛸</div>
-    <h1>SkyDroid Live Streaming Dashboard</h1>
-    <p>Visible and Thermal Camera Monitoring · SkyDroid C12</p>
+    <div class="header-left">
+      <div class="header-icon">🛸</div>
+      <div>
+        <h1>SkyDroid C12 Control Center</h1>
+        <p>Visible &amp; Thermal · Gimbal · Camera · Calibration</p>
+      </div>
+    </div>
+    <div class="header-badges">
+      <span id="status-mock"      class="status-chip chip-inactive">Mock Mode</span>
+      <span id="status-recording" class="status-chip chip-inactive">Not Recording</span>
+      <span id="status-tracking"  class="status-chip chip-inactive">Tracking OFF</span>
+    </div>
   </header>
 
   <!-- ═══════════════════════════════════════════════════════════
@@ -22,107 +31,260 @@
   ═══════════════════════════════════════════════════════════ -->
   <main>
 
-    <!-- ── Control panel ──────────────────────────────────────── -->
+    <!-- ── Top row: video + gimbal ─────────────────────────────── -->
+    <div class="top-row">
+
+      <!-- ── Video feeds ─────────────────────────────────────────── -->
+      <section class="video-section" aria-label="Live Video Feeds">
+        <p class="section-heading">Live Feeds</p>
+        <div class="video-grid">
+
+          <div class="video-card">
+            <div class="video-card-header">
+              <span class="video-card-title"><span class="icon">📷</span> Visible</span>
+              <span class="badge badge-offline" id="visible-status-cam">
+                <span class="badge-dot"></span> Offline
+              </span>
+            </div>
+            <div class="video-wrapper">
+              <img src="/video/visible" alt="Visible camera stream" loading="eager" />
+              <div class="video-overlay-fps" id="visible-fps-overlay">— fps</div>
+            </div>
+          </div>
+
+          <div class="video-card">
+            <div class="video-card-header">
+              <span class="video-card-title"><span class="icon">🌡️</span> Thermal</span>
+              <span class="badge badge-offline" id="thermal-status-cam">
+                <span class="badge-dot"></span> Offline
+              </span>
+            </div>
+            <div class="video-wrapper">
+              <img src="/video/thermal" alt="Thermal camera stream" loading="eager" />
+              <div class="video-overlay-fps" id="thermal-fps-overlay">— fps</div>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- ── Gimbal control ──────────────────────────────────────── -->
+      <section class="gimbal-section glass-card" aria-label="Gimbal Control">
+        <p class="section-heading">Gimbal Control</p>
+        <p class="kb-hint">Hold button to move · <strong>W A S D Q E</strong> keys · <strong>?</strong> for all shortcuts</p>
+
+        <!-- D-pad -->
+        <div class="dpad">
+          <button id="btn-pitch-up"   class="dpad-btn dpad-up"    title="Pitch Up (W)">▲</button>
+          <button id="btn-yaw-left"   class="dpad-btn dpad-left"  title="Yaw Left (A)">◄</button>
+          <button id="btn-stop"       class="dpad-btn dpad-center" title="Stop (Space)">⬛</button>
+          <button id="btn-yaw-right"  class="dpad-btn dpad-right" title="Yaw Right (D)">►</button>
+          <button id="btn-pitch-down" class="dpad-btn dpad-down"  title="Pitch Down (S)">▼</button>
+        </div>
+
+        <!-- Roll row -->
+        <div class="roll-row">
+          <button id="btn-roll-left"  class="btn btn-control" title="Roll Left (Q)">↺ Roll L</button>
+          <button id="btn-roll-right" class="btn btn-control" title="Roll Right (E)">↻ Roll R</button>
+        </div>
+
+        <!-- Preset moves -->
+        <div class="preset-grid">
+          <button id="btn-center"       class="btn btn-preset" title="Center All (C)">✦ Center</button>
+          <button id="btn-center-yaw"   class="btn btn-preset">↔ Ctr Yaw</button>
+          <button id="btn-look-down"    class="btn btn-preset">↓ Look Down</button>
+          <button id="btn-look-forward" class="btn btn-preset">→ Forward</button>
+        </div>
+
+        <!-- Speed mode -->
+        <div class="mode-row">
+          <span class="mode-label">Speed:</span>
+          <button id="btn-speed-constant" class="btn btn-toggle btn-active">Constant</button>
+          <button id="btn-speed-variable" class="btn btn-toggle">Variable</button>
+        </div>
+      </section>
+
+    </div><!-- end top-row -->
+
+    <!-- ── Stream controls & status ────────────────────────────── -->
     <section aria-label="Stream Controls">
-      <p class="section-heading">Stream Controls</p>
-      <div class="control-panel">
-        <span class="label">Manage live RTSP streams:</span>
-        <button class="btn btn-start" id="btn-start">
-          ▶ Start Streams
-        </button>
-        <button class="btn btn-stop" id="btn-stop">
-          ■ Stop Streams
-        </button>
-        <button class="btn btn-refresh" id="btn-refresh">
-          ↻ Refresh Status
-        </button>
-      </div>
-    </section>
+      <p class="section-heading">Stream &amp; Status</p>
+      <div class="status-bar glass-card">
 
-    <!-- ── Status cards ────────────────────────────────────────── -->
-    <section aria-label="Stream Status">
-      <p class="section-heading">Live Status</p>
-      <div class="status-grid">
+        <div class="stream-btns">
+          <button class="btn btn-start"   id="btn-start">▶ Start</button>
+          <button class="btn btn-stop"    id="btn-stop">■ Stop</button>
+          <button class="btn btn-refresh" id="btn-refresh">↻ Refresh</button>
+        </div>
 
-        <div class="stat-card">
-          <span class="stat-label">📷 Visible Camera</span>
-          <div id="visible-status" class="badge badge-offline">
-            <span class="badge-dot"></span> Offline
+        <div class="stat-pills">
+          <div class="stat-pill">
+            <span class="pill-label">📷 Visible</span>
+            <span id="visible-status" class="badge badge-offline"><span class="badge-dot"></span> Offline</span>
+            <span id="visible-fps" class="pill-fps">— fps</span>
           </div>
-        </div>
-
-        <div class="stat-card">
-          <span class="stat-label">🌡️ Thermal Camera</span>
-          <div id="thermal-status" class="badge badge-offline">
-            <span class="badge-dot"></span> Offline
+          <div class="stat-pill">
+            <span class="pill-label">🌡️ Thermal</span>
+            <span id="thermal-status" class="badge badge-offline"><span class="badge-dot"></span> Offline</span>
+            <span id="thermal-fps" class="pill-fps">— fps</span>
           </div>
-        </div>
-
-        <div class="stat-card">
-          <span class="stat-label">Visible FPS</span>
-          <span class="stat-value" id="visible-fps">— fps</span>
-        </div>
-
-        <div class="stat-card">
-          <span class="stat-label">Thermal FPS</span>
-          <span class="stat-value" id="thermal-fps">— fps</span>
-        </div>
-
-        <div class="stat-card">
-          <span class="stat-label">⏱ Server Uptime</span>
-          <span class="stat-value" id="uptime">0s</span>
-        </div>
-
-      </div>
-    </section>
-
-    <!-- ── Video streams ───────────────────────────────────────── -->
-    <section aria-label="Live Video Feeds">
-      <p class="section-heading">Live Feeds</p>
-      <div class="video-grid">
-
-        <!-- Visible camera -->
-        <div class="video-card">
-          <div class="video-card-header">
-            <span class="video-card-title">
-              <span class="icon">📷</span> Visible Camera
-            </span>
-            <span class="badge badge-offline" id="visible-status-cam">
-              <span class="badge-dot"></span> Offline
-            </span>
+          <div class="stat-pill">
+            <span class="pill-label">⏱ Uptime</span>
+            <span id="uptime" class="pill-val">0s</span>
           </div>
-          <div class="video-wrapper">
-            <img
-              src="/video/visible"
-              alt="Visible camera stream"
-              loading="eager"
-            />
-            <div class="video-overlay-fps" id="visible-fps-overlay">— fps</div>
+          <div class="stat-pill">
+            <span class="pill-label">🔍 Zoom</span>
+            <span id="status-zoom" class="pill-val">1.00×</span>
           </div>
-        </div>
-
-        <!-- Thermal camera -->
-        <div class="video-card">
-          <div class="video-card-header">
-            <span class="video-card-title">
-              <span class="icon">🌡️</span> Thermal Camera
-            </span>
-            <span class="badge badge-offline" id="thermal-status-cam">
-              <span class="badge-dot"></span> Offline
-            </span>
+          <div class="stat-pill">
+            <span class="pill-label">🎨 Palette</span>
+            <span id="status-palette" class="pill-val">White Hot</span>
           </div>
-          <div class="video-wrapper">
-            <img
-              src="/video/thermal"
-              alt="Thermal camera stream"
-              loading="eager"
-            />
-            <div class="video-overlay-fps" id="thermal-fps-overlay">— fps</div>
+          <div class="stat-pill">
+            <span class="pill-label">⌘ Last Cmd</span>
+            <span id="status-cmd" class="pill-val">—</span>
           </div>
         </div>
 
       </div>
     </section>
+
+    <!-- ── Second row: camera + thermal + image ────────────────── -->
+    <div class="control-row">
+
+      <!-- Camera capture -->
+      <section class="glass-card" aria-label="Camera Capture">
+        <p class="section-heading">Camera</p>
+
+        <div class="capture-btns">
+          <button id="btn-photo"     class="btn btn-photo">📷 Photo</button>
+          <button id="btn-rec-start" class="btn btn-rec">● Record</button>
+          <button id="btn-rec-stop"  class="btn btn-control">■ Stop Rec</button>
+        </div>
+        <div class="rec-status">
+          <span id="rec-indicator" class="rec-dot"></span>
+          <span class="rec-label">Recording</span>
+        </div>
+
+        <hr class="divider" />
+
+        <!-- Zoom -->
+        <p class="sub-heading">Zoom</p>
+        <div class="zoom-row">
+          <button id="btn-zoom-out" class="btn btn-control" title="Zoom Out (X)">−</button>
+          <input  id="zoom-slider" type="range" min="1" max="4" step="0.25" value="1" class="slider" />
+          <button id="btn-zoom-in"  class="btn btn-control" title="Zoom In (Z)">+</button>
+        </div>
+        <div class="zoom-display-row">
+          <span id="zoom-display" class="zoom-value">1.00×</span>
+        </div>
+
+        <hr class="divider" />
+
+        <!-- Tracking -->
+        <p class="sub-heading">Target Tracking</p>
+        <div class="btn-pair">
+          <button id="btn-track-enable"  class="btn btn-success">🎯 Enable</button>
+          <button id="btn-track-disable" class="btn btn-control">✕ Disable</button>
+        </div>
+
+        <hr class="divider" />
+
+        <!-- Working mode -->
+        <p class="sub-heading">Working Mode</p>
+        <div class="btn-pair">
+          <button id="btn-mode-hoist"       class="btn btn-toggle">⬆ Hoist</button>
+          <button id="btn-mode-upside-down" class="btn btn-toggle">⬇ Inverted</button>
+        </div>
+
+      </section>
+
+      <!-- Thermal settings -->
+      <section class="glass-card" aria-label="Thermal Settings">
+        <p class="section-heading">Thermal</p>
+
+        <label class="field-label">Palette</label>
+        <select id="palette-select" class="select">
+          <option>White Hot</option>
+          <option>Black Hot</option>
+          <option>Iron Red</option>
+          <option>Rainbow</option>
+          <option>Arctic</option>
+          <option>Lava</option>
+          <option>Medical</option>
+          <option>Fusion</option>
+          <option>Amber</option>
+          <option>Red Hot</option>
+          <option>Green Hot</option>
+        </select>
+
+        <label class="field-label mt">Gain Mode</label>
+        <select id="gain-select" class="select">
+          <option value="auto">Auto</option>
+          <option value="low">Low</option>
+          <option value="high">High</option>
+        </select>
+
+        <label class="field-label mt">Temperature Measurement</label>
+        <label class="toggle-row">
+          <input type="checkbox" id="temp-measure-toggle" class="toggle-input" />
+          <span class="toggle-track"></span>
+          <span class="toggle-text">Enabled</span>
+        </label>
+
+        <hr class="divider" />
+
+        <!-- Image settings -->
+        <p class="section-heading">Image Settings</p>
+
+        <div class="slider-group">
+          <div class="slider-row">
+            <span class="slider-label">Brightness</span>
+            <input id="slider-brightness" type="range" min="0" max="100" value="50" class="slider" />
+            <span id="val-brightness" class="slider-val">50</span>
+          </div>
+          <div class="slider-row">
+            <span class="slider-label">Contrast</span>
+            <input id="slider-contrast" type="range" min="0" max="100" value="50" class="slider" />
+            <span id="val-contrast" class="slider-val">50</span>
+          </div>
+          <div class="slider-row">
+            <span class="slider-label">Saturation</span>
+            <input id="slider-saturation" type="range" min="0" max="100" value="50" class="slider" />
+            <span id="val-saturation" class="slider-val">50</span>
+          </div>
+          <div class="slider-row">
+            <span class="slider-label">Sharpness</span>
+            <input id="slider-sharpness" type="range" min="0" max="100" value="50" class="slider" />
+            <span id="val-sharpness" class="slider-val">50</span>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- Calibration -->
+      <section class="glass-card" aria-label="Calibration">
+        <p class="section-heading">Calibration</p>
+
+        <div class="cal-grid">
+          <button id="btn-cal-temp"  class="btn btn-caution">🌡 Temp Cal</button>
+          <button id="btn-cal-horiz" class="btn btn-caution">↔ Horizontal</button>
+          <button id="btn-cal-vert"  class="btn btn-caution">↕ Vertical</button>
+        </div>
+
+        <hr class="divider" />
+        <p class="sub-heading">Fine Adjustment</p>
+        <div class="fine-grid">
+          <label class="field-label-sm">Roll Offset</label>
+          <input id="fine-roll"  type="number" step="0.1" value="0" class="number-input" placeholder="0.0" />
+          <label class="field-label-sm">Pitch Offset</label>
+          <input id="fine-pitch" type="number" step="0.1" value="0" class="number-input" placeholder="0.0" />
+        </div>
+        <button id="btn-cal-fine" class="btn btn-caution mt-btn">✦ Apply Fine Adjust</button>
+
+      </section>
+
+    </div><!-- end control-row -->
 
   </main>
 
@@ -130,12 +292,40 @@
        FOOTER
   ═══════════════════════════════════════════════════════════ -->
   <footer>
-    Designed for <strong>SkyDroid C12 + G20 + GR01</strong>
+    SkyDroid C12 Control Center · Mock Mode enabled by default ·
+    Press <kbd>?</kbd> for keyboard shortcuts
   </footer>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       KEYBOARD SHORTCUT OVERLAY
+  ═══════════════════════════════════════════════════════════ -->
+  <div id="kb-overlay" class="kb-overlay" onclick="this.classList.remove('visible')">
+    <div class="kb-overlay-card" onclick="event.stopPropagation()">
+      <h2 class="kb-title">Keyboard Shortcuts</h2>
+      <div class="kb-grid">
+        <div class="kb-row"><kbd>W</kbd><span>Pitch Up</span></div>
+        <div class="kb-row"><kbd>S</kbd><span>Pitch Down</span></div>
+        <div class="kb-row"><kbd>A</kbd><span>Yaw Left</span></div>
+        <div class="kb-row"><kbd>D</kbd><span>Yaw Right</span></div>
+        <div class="kb-row"><kbd>Q</kbd><span>Roll Left</span></div>
+        <div class="kb-row"><kbd>E</kbd><span>Roll Right</span></div>
+        <div class="kb-row"><kbd>Space</kbd><span>Stop Motion</span></div>
+        <div class="kb-row"><kbd>C</kbd><span>Center All</span></div>
+        <div class="kb-row"><kbd>Z</kbd><span>Zoom In</span></div>
+        <div class="kb-row"><kbd>X</kbd><span>Zoom Out</span></div>
+        <div class="kb-row"><kbd>?</kbd><span>Toggle This Help</span></div>
+        <div class="kb-row"><kbd>Esc</kbd><span>Close Help</span></div>
+      </div>
+      <p class="kb-note">Arrow keys also work for Pitch / Yaw. Hold any key for continuous movement.</p>
+      <button class="btn btn-control mt-btn" onclick="document.getElementById('kb-overlay').classList.remove('visible')">Close</button>
+    </div>
+  </div>
 
   <!-- Toast notification -->
   <div id="toast"></div>
 
   <script src="/static/js/app.js"></script>
+  <script src="/static/js/controls.js"></script>
+  <script src="/static/js/keyboard.js"></script>
 </body>
 </html>
