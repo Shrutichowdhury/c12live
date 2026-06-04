@@ -1,0 +1,1 @@
+- [Skydroid real protocol](skydroid-protocol.md) — ASCII text over UDP, NOT binary SIYI; from APK reverse-engineering

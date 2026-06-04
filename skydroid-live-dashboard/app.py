@@ -212,23 +212,26 @@ def api_connection_test():
     ip   = (request.json or {}).get("camera_ip",    _config["camera_ip"])
     port = int((request.json or {}).get("control_port", _config["control_port"]))
 
-    # --- UDP probe first ---
+    # --- UDP probe: send real Skydroid version query ---
     try:
         import services.command_protocol as proto
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.settimeout(2)
-        probe = proto.build_frame(proto.CMD.FIRMWARE_VERSION, b"", 0)
+        probe = proto.CMD_QUERY_VERSION()   # "#TPUD2rVER00" + CRC  (real ASCII protocol)
         s.sendto(probe, (ip, port))
+        logger.info("Connection test UDP %s:%d — sent %s", ip, port, probe.decode())
         try:
-            data, _ = s.recvfrom(1024)
+            data, _ = s.recvfrom(4096)
             s.close()
-            logger.info("Connection test UDP %s:%d — reachable, got %d bytes", ip, port, len(data))
+            parsed = proto.parse_response(data)
+            logger.info("Connection test UDP %s:%d — got reply: %s", ip, port, parsed.get("raw_text", data.hex()))
             return jsonify({"success": True, "reachable": True, "transport": "udp",
-                            "reply_hex": data.hex(), "ip": ip, "port": port})
+                            "reply": parsed.get("raw_text", ""), "reply_hex": data.hex(),
+                            "ip": ip, "port": port})
         except socket.timeout:
-            # No reply over UDP — port may still be open (fire-and-forget cameras)
+            # No reply — port may still be open (some firmware replies, some doesn't)
             s.close()
-            logger.info("Connection test UDP %s:%d — probe sent, no reply (normal for some cameras)", ip, port)
+            logger.info("Connection test UDP %s:%d — probe sent, no reply (normal)", ip, port)
             # Fall through to TCP to confirm reachability
         except OSError:
             s.close()
@@ -263,16 +266,23 @@ def api_probe():
 
     def udp_probe(name: str, pkt: bytes, listen_sec: float = 1.5) -> dict:
         """Send pkt over UDP and wait up to listen_sec for any reply."""
-        entry = {"probe": name, "sent_hex": pkt.hex()}
+        entry = {
+            "probe": name,
+            "sent_hex": pkt.hex(),
+            "sent_ascii": pkt.decode("latin-1", errors="replace"),
+        }
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             s.settimeout(listen_sec)
             s.sendto(pkt, (ip, port))
             try:
                 data, addr = s.recvfrom(4096)
-                entry["reply_hex"] = data.hex()
-                entry["reply_len"] = len(data)
-                entry["reply_from"] = str(addr)
+                parsed = proto.parse_response(data)
+                entry["reply_hex"]   = data.hex()
+                entry["reply_ascii"] = data.decode("latin-1", errors="replace")
+                entry["reply_text"]  = parsed.get("raw_text", "")
+                entry["reply_len"]   = len(data)
+                entry["reply_from"]  = str(addr)
             except socket.timeout:
                 entry["reply"] = "no_reply"
             s.close()
@@ -280,72 +290,41 @@ def api_probe():
             entry["error"] = str(exc)
         return entry
 
-    # ── 1. SIYI standard — firmware version query ──────────────────────────
+    # ── 1. Real Skydroid protocol — firmware version query ─────────────────
     results.append(udp_probe(
-        "siyi_v1_firmware",
-        proto.build_frame(proto.CMD.FIRMWARE_VERSION, b"", 1),
+        "skydroid_ver",
+        proto.CMD_QUERY_VERSION(),   # "#TPUD2rVER00" + CRC
     ))
 
-    # ── 2. SIYI standard — gimbal attitude query ───────────────────────────
+    # ── 2. Real Skydroid protocol — recording state query ──────────────────
     results.append(udp_probe(
-        "siyi_v1_attitude",
-        proto.build_frame(proto.CMD.GIMBAL_ATTITUDE, b"", 2),
+        "skydroid_rec",
+        proto.CMD_QUERY_REC(),       # "#TPUD2rREC00" + CRC
     ))
 
-    # ── 3. SIYI standard — center gimbal (sends actual movement cmd) ───────
+    # ── 3. Real Skydroid protocol — PTZ STOP (safe, no movement) ──────────
     results.append(udp_probe(
-        "siyi_v1_center",
-        proto.cmd_center_gimbal(3),
+        "skydroid_ptz_stop",
+        proto.CMD_PTZ_STOP(),        # "#TPUG2wPTZ00" + CRC
     ))
 
-    # ── 4. SIYI v2 variant — some cameras use 0x6655 instead of 0x5566 ────
-    #       frame: [0x66][0x55][0x01][len16LE][seq16LE][cmd][data][crc16LE]
-    def siyi_v2_frame(cmd_id: int, data: bytes = b"", seq: int = 0) -> bytes:
-        from services.command_protocol import crc16
-        inner = bytes([0x01]) + (len(data)).to_bytes(2, "little") + \
-                seq.to_bytes(2, "little") + bytes([cmd_id]) + data
-        crc = crc16(inner)
-        return bytes([0x66, 0x55]) + inner + crc.to_bytes(2, "little")
+    # ── 4. Real Skydroid protocol — PTZ CENTER ─────────────────────────────
+    results.append(udp_probe(
+        "skydroid_ptz_center",
+        proto.CMD_PTZ_CENTER(),      # "#TPUG2wPTZ05" + CRC
+    ))
 
-    results.append(udp_probe("siyi_v2_firmware", siyi_v2_frame(0x01, b"", 1)))
-    results.append(udp_probe("siyi_v2_center",   siyi_v2_frame(0x0D, b"\x01", 2)))
+    # ── 5. Real Skydroid protocol — zoom stop ──────────────────────────────
+    results.append(udp_probe(
+        "skydroid_zoom_stop",
+        proto.CMD_ZOOM_STOP(),       # "#TPUM2wZMC00" + CRC
+    ))
 
-    # ── 5. Viewpro / ViewLink protocol — magic 0xEB 0x90 ──────────────────
-    #       [0xEB][0x90][addr][cmd][len][data…][checksum]
-    def viewpro_frame(cmd: int, data: bytes = b"") -> bytes:
-        body = bytes([0x01, cmd, len(data)]) + data
-        chk  = sum(body) & 0xFF
-        return bytes([0xEB, 0x90]) + body + bytes([chk])
-
-    results.append(udp_probe("viewpro_query",  viewpro_frame(0x01)))
-    results.append(udp_probe("viewpro_center", viewpro_frame(0x08, b"\x00\x00\x00")))
-
-    # ── 6. MAVLink heartbeat — some cameras respond to MAVLink ─────────────
-    #       HEARTBEAT (msg 0) from GCS (sys 255, comp 190)
-    def mavlink_heartbeat() -> bytes:
-        #  STX  len  seq  sys   comp  msgid  payload (9 bytes for HEARTBEAT)
-        payload = bytes([
-            0x00, 0x00, 0x00, 0x00,   # custom_mode
-            0x06,                      # type=6 (GCS)
-            0x08,                      # autopilot=8 (INVALID/NONE)
-            0x00,                      # base_mode
-            0x04,                      # system_status=4 (ACTIVE)
-            0x03,                      # mavlink_version=3
-        ])
-        seq, sys_id, comp_id, msg_id = 0, 255, 190, 0
-        header = bytes([0xFE, len(payload), seq, sys_id, comp_id, msg_id])
-        crc_extra = 50   # HEARTBEAT CRC_EXTRA
-        import struct
-        crc_data = bytes([len(payload), seq, sys_id, comp_id, msg_id]) + payload + bytes([crc_extra])
-        crc_val = 0xFFFF
-        for b in crc_data:
-            tmp = b ^ (crc_val & 0xFF)
-            tmp = (tmp ^ (tmp << 4)) & 0xFF
-            crc_val = (crc_val >> 8) ^ (tmp << 8) ^ (tmp << 3) ^ (tmp >> 4)
-            crc_val &= 0xFFFF
-        return header + payload + struct.pack("<H", crc_val)
-
-    results.append(udp_probe("mavlink_heartbeat", mavlink_heartbeat(), 2.0))
+    # ── 6. Real Skydroid protocol — video config query ─────────────────────
+    results.append(udp_probe(
+        "skydroid_vom",
+        proto.CMD_QUERY_VOM(),       # "#TPUD2rVOM00" + CRC
+    ))
 
     # ── 7. Listen passively for camera broadcasts ──────────────────────────
     #       Many cameras broadcast status on the same port without any query.
@@ -360,7 +339,10 @@ def api_probe():
         while time.time() < deadline:
             try:
                 data, addr = s.recvfrom(4096)
-                broadcasts.append({"from": str(addr), "hex": data.hex(), "len": len(data)})
+                broadcasts.append({
+                    "from": str(addr), "hex": data.hex(), "len": len(data),
+                    "ascii": data.decode("latin-1", errors="replace"),
+                })
                 if len(broadcasts) >= 5:
                     break
             except socket.timeout:
@@ -448,6 +430,69 @@ def api_probe_listen():
         return jsonify({"success": False, "error": str(exc)})
 
     return jsonify({"success": True, "port": port, "packets": packets, "count": len(packets)})
+
+
+@app.route("/api/raw_command", methods=["POST"])
+def api_raw_command():
+    """
+    Send an arbitrary raw command directly to the camera over UDP.
+    The real Skydroid ASCII protocol is used: CRC is appended automatically
+    unless add_crc=false is passed.
+
+    Body:
+      { "cmd": "#TPUG2wPTZ01", "add_crc": true,
+        "camera_ip": "192.168.144.108", "port": 37260,
+        "wait_reply": true }
+
+    Returns the command string sent, hex bytes, and any reply received.
+    """
+    import services.command_protocol as proto
+    body     = request.json or {}
+    cmd      = body.get("cmd", "").strip()
+    add_crc  = body.get("add_crc", True)
+    ip       = body.get("camera_ip", _config["camera_ip"])
+    port     = int(body.get("port", _config["control_port"]))
+    wait_rep = body.get("wait_reply", True)
+
+    if not cmd:
+        return jsonify({"success": False, "error": "cmd is required"})
+
+    try:
+        if add_crc:
+            frame = proto.build(cmd)
+        else:
+            frame = proto.build_raw(cmd)
+
+        result = {
+            "success":    True,
+            "sent_ascii": frame.decode("latin-1", errors="replace"),
+            "sent_hex":   frame.hex(),
+            "ip":         ip,
+            "port":       port,
+        }
+
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.settimeout(2.0)
+        s.sendto(frame, (ip, port))
+        logger.info("[raw_cmd] TX %s:%d  %s", ip, port, frame.decode("latin-1", errors="replace"))
+
+        if wait_rep:
+            try:
+                data, addr = s.recvfrom(4096)
+                parsed = proto.parse_response(data)
+                result["reply_ascii"] = data.decode("latin-1", errors="replace")
+                result["reply_hex"]   = data.hex()
+                result["reply_text"]  = parsed.get("raw_text", "")
+                result["reply_from"]  = str(addr)
+                logger.info("[raw_cmd] RX from %s: %s", addr, parsed.get("raw_text", data.hex()))
+            except socket.timeout:
+                result["reply"] = "no_reply"
+        s.close()
+        return jsonify(result)
+
+    except Exception as exc:
+        logger.error("[raw_cmd] Error: %s", exc)
+        return jsonify({"success": False, "error": str(exc)})
 
 
 @app.route("/api/start", methods=["POST"])

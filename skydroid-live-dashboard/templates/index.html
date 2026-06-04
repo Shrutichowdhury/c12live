@@ -358,22 +358,49 @@
         <div id="conn-probe-result"  class="conn-probe-result  hidden"></div>
         <div id="conn-listen-result" class="conn-probe-result  hidden"></div>
 
+        <!-- Raw Command panel -->
+        <hr class="divider" />
+        <div class="conn-fields" style="margin-top:8px">
+          <p class="section-heading" style="margin:0 0 8px;font-size:.85rem">Raw Command Terminal</p>
+          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+            <input id="inp-raw-cmd" type="text" class="text-input"
+                   style="flex:1;min-width:200px;font-family:monospace"
+                   placeholder="#TPUG2wPTZ01  ← type any command, CRC added auto" />
+            <button id="btn-raw-send" class="btn btn-toggle">⚡ Send</button>
+            <label style="display:flex;align-items:center;gap:4px;font-size:.8rem;color:var(--text-muted);white-space:nowrap">
+              <input id="chk-raw-crc" type="checkbox" checked /> auto-CRC
+            </label>
+          </div>
+          <div style="margin-top:6px;font-size:.75rem;color:var(--text-muted)">
+            Quick-fill:
+            <button class="btn btn-xs" onclick="document.getElementById('inp-raw-cmd').value='#TPUD2rVER00'">Version</button>
+            <button class="btn btn-xs" onclick="document.getElementById('inp-raw-cmd').value='#TPUG2wPTZ05'">Center</button>
+            <button class="btn btn-xs" onclick="document.getElementById('inp-raw-cmd').value='#TPUG2wPTZ01'">PitchUp</button>
+            <button class="btn btn-xs" onclick="document.getElementById('inp-raw-cmd').value='#TPUG2wPTZ00'">Stop</button>
+            <button class="btn btn-xs" onclick="document.getElementById('inp-raw-cmd').value='#TPUM2wZMC01'">ZoomIn</button>
+            <button class="btn btn-xs" onclick="document.getElementById('inp-raw-cmd').value='#TPUD2rREC00'">RecState</button>
+          </div>
+        </div>
+        <div id="raw-cmd-result" class="conn-probe-result hidden"></div>
+
         <!-- Instructions -->
+        <hr class="divider" />
         <details class="conn-help">
           <summary class="conn-help-summary">Steps to get real gimbal control working</summary>
           <div class="conn-help-body">
             <ol>
               <li>Download the <code>skydroid-live-dashboard/</code> folder to a PC on the same network as the camera.</li>
-              <li>Double-click <code>run_local.bat</code> (Windows) or run <code>./run_local.sh</code> (Mac/Linux) — it installs Python deps and starts the server automatically.</li>
+              <li>Double-click <code>run_local.bat</code> (Windows) or run <code>./run_local.sh</code> (Mac/Linux) — installs Python deps and starts the server automatically.</li>
               <li>Open <code>http://localhost:5000</code> in your browser.</li>
-              <li>Click <strong>Test Connection</strong> — if green, the control port is reachable.</li>
-              <li>Click <strong>Protocol Probe</strong> — sends two SIYI-format packets and shows any raw bytes the camera replies with.</li>
-              <li>Click <strong>Enable Real Control</strong> — gimbal commands will go directly to the camera using the SIYI binary protocol (the standard for this camera family).</li>
+              <li>Click <strong>Test</strong> — if green, UDP port 37260 is reachable.</li>
+              <li>Click <strong>Multi-Protocol Scan</strong> — sends real Skydroid ASCII commands and shows any replies. Watch if the gimbal physically moves when the Center command fires.</li>
+              <li>Use the <strong>Raw Command Terminal</strong> above to send any individual command and see the exact bytes exchanged.</li>
+              <li>Click <strong>Enable Real Control</strong> — all D-pad, zoom, and camera buttons will now send real ASCII commands directly to the camera over UDP.</li>
             </ol>
             <p class="conn-help-note">
-              The C12 uses a SIYI SDK-compatible binary protocol over UDP port 37260.
-              If the probe shows replies starting with <code>5566</code>, the protocol is confirmed and real control will work immediately.
-              If not, share the probe output and we can tune the packet format.
+              Protocol confirmed from APK reverse-engineering: plain ASCII text over UDP 37260.<br>
+              Command format: <code>#TPUG2wPTZ01</code> + 2-hex-digit checksum (e.g. <code>#TPUG2wPTZ016B</code>).<br>
+              No binary encoding, no proprietary SDK needed.
             </p>
           </div>
         </details>

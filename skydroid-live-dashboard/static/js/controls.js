@@ -472,29 +472,28 @@ function initConnectionSettings() {
     const r = await apiPost("/api/probe", { camera_ip: ip, control_port: port });
     if (!box) return;
 
-    let text = "═══ Multi-Protocol Scan Results ═══\n" + ip + ":" + port + "\n\n";
+    let text = "═══ Real Skydroid ASCII Protocol Scan ═══\n" + ip + ":" + port + "\n\n";
     let anyReply = false;
 
     (r.probes || []).forEach(p => {
       text += "┌─ " + p.probe + "\n";
-      if (p.sent_hex) text += "│  Sent:  " + p.sent_hex + "\n";
-      if (p.reply_hex) {
+      if (p.sent_ascii) text += "│  Sent:  " + p.sent_ascii + "\n";
+      if (p.reply_text) {
         anyReply = true;
         text += "│  ✓ Reply (" + p.reply_len + "B from " + p.reply_from + "):\n";
-        text += "│     " + p.reply_hex + "\n";
-        if (p.reply_hex.startsWith("5566")) text += "│  ★ SIYI v1 format!\n";
-        else if (p.reply_hex.startsWith("6655")) text += "│  ★ SIYI v2 format!\n";
-        else if (p.reply_hex.startsWith("eb90")) text += "│  ★ Viewpro format!\n";
-        else if (p.reply_hex.startsWith("fe")) text += "│  ★ MAVLink format!\n";
-        else text += "│  ★ UNKNOWN format — share this hex!\n";
+        text += "│     ASCII: " + p.reply_text + "\n";
+        text += "│     Hex:   " + p.reply_hex + "\n";
+        if (p.reply_text.startsWith("#TP")) text += "│  ★ Real Skydroid protocol confirmed!\n";
       } else if (p.reply === "no_reply") {
-        text += "│  no reply\n";
+        text += "│  no reply (normal — camera may not reply to all queries)\n";
       } else if (p.broadcasts !== undefined) {
         if (p.count > 0) {
           anyReply = true;
           text += "│  ✓ Got " + p.count + " broadcast packet(s)!\n";
           p.broadcasts.forEach(b => {
-            text += "│    from " + b.from + " (" + b.len + "B): " + b.hex + "\n";
+            text += "│    from " + b.from + " (" + b.len + "B):\n";
+            text += "│    ASCII: " + (b.ascii || "") + "\n";
+            text += "│    Hex:   " + b.hex + "\n";
           });
         } else {
           text += "│  no broadcasts heard\n";
@@ -517,14 +516,14 @@ function initConnectionSettings() {
     });
 
     if (anyReply) {
-      text += "★ Camera replied to at least one probe — copy the result above and share it to identify the protocol.\n";
-      showToast("Camera replied! Check probe results.", "success");
+      text += "★ Camera replied! Real control should work — click \"Enable Real Control\".\n";
+      showToast("Camera replied! Real control ready.", "success");
     } else {
-      text += "▸ No replies received.\n";
-      text += "▸ This is NORMAL for fire-and-forget cameras.\n";
-      text += "▸ The center-gimbal command was sent in 5 formats — did the gimbal move?\n";
-      text += "▸ If yes → click \"Enable Real Control\" and use the dashboard normally.\n";
-      text += "▸ If no  → try clicking \"Listen 5 s\" with the camera powered on.\n";
+      text += "▸ No replies received (this can be normal).\n";
+      text += "▸ Commands WERE sent using the real Skydroid ASCII protocol.\n";
+      text += "▸ Did the gimbal move when PTZ CENTER was sent? If yes → real control works!\n";
+      text += "▸ Click \"Enable Real Control\" and try the D-pad buttons.\n";
+      text += "▸ Use the Raw Command panel below to send individual commands and watch for replies.\n";
       showToast("Scan complete — did the gimbal move?", "info");
     }
 
@@ -565,20 +564,67 @@ function initConnectionSettings() {
     let text = "📻 Got " + r.count + " packet(s) on port " + port + "!\n\n";
     r.packets.forEach((p, i) => {
       text += "Packet #" + (i + 1) + " from " + p.from + " (" + p.len + " bytes):\n";
-      text += "  Hex: " + p.hex + "\n";
-      // Try to identify protocol from first bytes
+      if (p.ascii) text += "  ASCII: " + p.ascii + "\n";
+      text += "  Hex:   " + p.hex + "\n";
       const h = p.hex;
-      if (h.startsWith("5566")) text += "  → SIYI v1 format\n";
-      else if (h.startsWith("6655")) text += "  → SIYI v2 format\n";
+      const a = (p.ascii || "");
+      if (a.startsWith("#TP"))       text += "  → Real Skydroid ASCII protocol! ★\n";
+      else if (h.startsWith("5566")) text += "  → SIYI binary format\n";
+      else if (h.startsWith("6655")) text += "  → SIYI v2 binary format\n";
       else if (h.startsWith("eb90")) text += "  → Viewpro format\n";
       else if (h.startsWith("fe"))   text += "  → MAVLink v1\n";
       else if (h.startsWith("fd"))   text += "  → MAVLink v2\n";
-      else text += "  → Unknown format — share this hex!\n";
+      else                           text += "  → Unknown format\n";
       text += "\n";
     });
     box.textContent = text;
     showToast("Received " + r.count + " packet(s) from camera!", "success");
   });
+
+  // ── Raw Command panel ────────────────────────────────────────────────────
+  on("btn-raw-send", "click", async () => {
+    const ip      = document.getElementById("inp-camera-ip")?.value   || "192.168.144.108";
+    const port    = parseInt(document.getElementById("inp-control-port")?.value || "37260", 10);
+    const cmdInp  = document.getElementById("inp-raw-cmd");
+    const addCrc  = document.getElementById("chk-raw-crc")?.checked !== false;
+    const box     = document.getElementById("raw-cmd-result");
+    const cmd     = cmdInp ? cmdInp.value.trim() : "";
+
+    if (!cmd) { showToast("Enter a command first", "warning"); return; }
+    if (box) {
+      box.textContent = "⏳ Sending " + cmd + " …";
+      box.className = "conn-probe-result visible";
+    }
+
+    const r = await apiPost("/api/raw_command", {
+      cmd, add_crc: addCrc, camera_ip: ip, port, wait_reply: true,
+    });
+    if (!box) return;
+
+    let text = "TX: " + (r.sent_ascii || cmd) + "\n";
+    text += "Hex: " + (r.sent_hex || "") + "\n\n";
+    if (r.reply_text) {
+      text += "RX: " + r.reply_text + "\n";
+      text += "Hex: " + r.reply_hex + "\n";
+      text += "From: " + r.reply_from + "\n";
+      showToast("Camera replied: " + r.reply_text.slice(0, 40), "success");
+    } else if (r.reply === "no_reply") {
+      text += "RX: no reply (2 s timeout)\n";
+      text += "(normal — many commands are fire-and-forget)";
+    } else if (r.error) {
+      text += "Error: " + r.error;
+      showToast("Error: " + r.error, "error");
+    }
+    box.textContent = text;
+  });
+
+  // Allow Enter key in the raw command input
+  const rawCmdInp = document.getElementById("inp-raw-cmd");
+  if (rawCmdInp) {
+    rawCmdInp.addEventListener("keydown", e => {
+      if (e.key === "Enter") document.getElementById("btn-raw-send")?.click();
+    });
+  }
 }
 
 // ─── Bootstrap ───────────────────────────────────────────────────────────────

@@ -472,6 +472,16 @@ main {
 
 .btn-caution:hover { background: rgba(217,119,6,0.22); }
 
+.btn-xs {
+  background: var(--bg-card-alt);
+  color: var(--text-muted);
+  border-color: var(--border);
+  padding: 3px 8px;
+  font-size: 0.7rem;
+  border-radius: 4px;
+}
+.btn-xs:hover { background: var(--accent-dim); color: var(--text-sec); }
+
 .kb-active {
   background: var(--accent-dim) !important;
   border-color: var(--accent) !important;

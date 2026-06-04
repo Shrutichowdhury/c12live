@@ -1,267 +1,268 @@
 """
 command_protocol.py
 -------------------
-Binary command protocol for the SkyDroid C12 over Ethernet.
+Real SkyDroid ASCII text protocol for the C12 gimbal camera.
 
-Frame format (SIYI SDK-compatible — the standard used by Skydroid, SIYI,
-and many other Chinese Ethernet gimbal cameras):
+PROTOCOL (reversed from official SkyDroid APK — SkydroidControl.java + UdpConnect.java)
+========================================================================================
 
-  [0x55][0x66][CTRL][LEN_L][LEN_H][SEQ_L][SEQ_H][CMD_ID][DATA…][CRC_L][CRC_H]
+Frame format:
+  <command_string><CRC>
 
-  CTRL   : 0x01 = request, 0x02 = response
-  LEN    : uint16 little-endian — length of DATA only (not header/CRC)
-  SEQ    : uint16 little-endian — sequence number, auto-incremented by caller
-  CRC    : CRC-16/IBM (ARC) over bytes [2 … last DATA byte] (excludes STX)
+  command_string : ASCII text, e.g. "#TPUG2wPTZ01"
+  CRC            : sum of all bytes in command_string, mod 256, as 2-char UPPERCASE hex
+                   e.g. sum("#TPUG2wPTZ01") & 0xFF = 0x6B  →  append "6B"
+  Final wire bytes: UTF-8 encode(command_string + crc_hex)
 
-References
-----------
-  • SIYI SDK protocol spec (public): https://github.com/mzahana/siyi_sdk
-  • Community reverse-engineering of Skydroid T-series / C-series cameras.
+Transport: UDP to camera port 37260 (also 9002 in some firmware).
+           TCP also supported on same port.
+
+Responses from camera are also ASCII strings starting with "#TP" or "AT+".
+
+PTZ Commands (#TPUG2wPTZ<code>)
+  00=STOP  01=UP  02=DOWN  03=LEFT  04=RIGHT  05=CENTER
+  06=FOLLOW_MODE  07=LOCK_HEAD  08=FOLLOW_SWITCH  09=CALIBRATION
+  0A=HOISTING  0B=INVERSION  0C=H_CAL  0D=V_CAL
+  0E=X_ADD  0F=X_REDUCE  10=Y_ADD  11=Y_REDUCE  12=Z_ADD  13=Z_REDUCE
+  14=CLEAR_ADJUST
+
+Zoom (#TPUM2wZMC<code>):  00=STOP  01=IN  02=OUT
+Focus (#TPUM2wFCC<code>): 00=STOP  01=ADD  02=REDUCE
+
+Video (#TPUD2wREC<code>): 01=START  00=STOP  0A=FLIP
+Photo: #TPUD2wCAP01
+
+Query commands (read, prefix "r"):
+  #TPUD2rVER00  — firmware version
+  #TPUD2rREC00  — recording state
+  #TPUD2rVOM00  — video config
+  #TPUD2rIQE00  — image quality/effect config
 """
 
 from __future__ import annotations
-import struct
 import logging
 
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# Frame constants
-# ---------------------------------------------------------------------------
-STX_HIGH  = 0x55
-STX_LOW   = 0x66
-CTRL_REQ  = 0x01   # outgoing request
-CTRL_RSP  = 0x02   # incoming response
 
 # ---------------------------------------------------------------------------
-# Command ID catalogue
-# ---------------------------------------------------------------------------
-class CMD:
-    FIRMWARE_VERSION   = 0x01
-    HARDWARE_ID        = 0x02
-    AUTO_FOCUS         = 0x04
-    VIDEO_RECORD       = 0x05   # data: 0x01=start  0x02=stop
-    TAKE_PHOTO         = 0x06
-    GIMBAL_ATTITUDE    = 0x07   # query — camera replies with roll/pitch/yaw
-    FUNC_FEEDBACK      = 0x08
-    PHOTO_FUNC         = 0x0C
-    CENTER_GIMBAL      = 0x0D   # data: 0x01
-    GIMBAL_ROTATE      = 0x0E   # data: [yaw_speed int8, pitch_speed int8]  -100…100
-    SET_ZOOM           = 0x0F   # data: [zoom uint8]  1-30
-    HYBRID_ZOOM        = 0x12   # same structure on some firmware
-    ZOOM_IN_STEP       = 0x14
-    ZOOM_OUT_STEP      = 0x15
-    MAX_ZOOM           = 0x16
-    FOCUS_IN           = 0x18
-    FOCUS_OUT          = 0x19
-    PALETTE            = 0x20   # data: [palette_id uint8]
-    THERMAL_GAIN       = 0x22   # data: [0x00=low 0x01=high 0xFF=auto]
-    TEMP_MEASURE       = 0x24   # data: [0x00=off 0x01=on]
-    IMAGE_SETTINGS     = 0x30   # data: [brightness, contrast, saturation, sharpness] each uint8 0-100
-    LOOK_DOWN          = 0x40   # look straight down (nadir)
-    LOOK_FORWARD       = 0x41
-    SYSTEM_REBOOT      = 0x80
-
-# ---------------------------------------------------------------------------
-# Palette name → ID mapping (SIYI ordering)
-# ---------------------------------------------------------------------------
-PALETTE_IDS: dict[str, int] = {
-    "White Hot":  0,
-    "Black Hot":  1,
-    "Iron Red":   2,
-    "Rainbow":    3,
-    "Arctic":     4,
-    "Lava":       5,
-    "Medical":    6,
-    "Fusion":     7,
-    "Amber":      8,
-    "Red Hot":    9,
-    "Green Hot":  10,
-}
-THERMAL_PALETTES = list(PALETTE_IDS.keys())
-
-# ---------------------------------------------------------------------------
-# CRC-16/IBM (ARC) — polynomial 0x8005, init 0x0000, reflected in/out
-# ---------------------------------------------------------------------------
-_CRC16_TABLE: list[int] = []
-
-
-def _init_crc16_table() -> None:
-    poly = 0x8005
-    for i in range(256):
-        crc = 0
-        c = i
-        for _ in range(8):
-            if (crc ^ c) & 0x0001:
-                crc = (crc >> 1) ^ poly
-            else:
-                crc >>= 1
-            c >>= 1
-        _CRC16_TABLE.append(crc)
-
-
-_init_crc16_table()
-
-
-def crc16(data: bytes) -> int:
-    """CRC-16/IBM (ARC) over *data*."""
-    crc = 0x0000
-    for byte in data:
-        idx = (crc ^ byte) & 0xFF
-        crc = ((crc >> 8) ^ _CRC16_TABLE[idx]) & 0xFFFF
-    return crc
-
-
-# ---------------------------------------------------------------------------
-# Frame builder / parser
+# CRC algorithm (from UdpConnect.java getCrc())
+#   sum all bytes of the command string, take low byte, format as 2-char hex
 # ---------------------------------------------------------------------------
 
-def build_frame(cmd_id: int, data: bytes = b"", seq: int = 0) -> bytes:
+def crc(cmd: str) -> str:
+    """Return 2-char uppercase hex checksum for *cmd*."""
+    total = sum(cmd.encode("utf-8")) & 0xFF
+    return f"{total:02X}"
+
+
+def build(cmd: str) -> bytes:
     """
-    Build a complete SIYI-format request frame.
+    Append CRC to *cmd* and return the full UTF-8 frame ready to send.
 
-    Args:
-        cmd_id: One of the CMD.* constants.
-        data:   Payload bytes (may be empty).
-        seq:    Sequence number (uint16, wraps at 65535).
-
-    Returns:
-        Ready-to-send bytes.
+    Example:
+      build("#TPUG2wPTZ01") -> b"#TPUG2wPTZ016B"
     """
-    length = len(data)
-    # Header bytes that are CRC'd (everything except the two STX bytes)
-    crc_payload = struct.pack("<BHHB", CTRL_REQ, length, seq & 0xFFFF, cmd_id) + data
-    checksum = crc16(crc_payload)
-    frame = bytes([STX_HIGH, STX_LOW]) + crc_payload + struct.pack("<H", checksum)
-    logger.debug("TX  cmd=0x%02X seq=%d len=%d  %s", cmd_id, seq, length, frame.hex())
-    return frame
+    frame = cmd + crc(cmd)
+    logger.debug("TX: %s", frame)
+    return frame.encode("utf-8")
 
 
-def parse_frame(data: bytes) -> dict:
+def build_raw(data: str) -> bytes:
     """
-    Parse a raw SIYI-format response frame.
-
-    Returns a dict with keys:
-      success, cmd_id, seq, payload, raw_hex
-
-    On parse error sets success=False and adds an 'error' key.
+    Send *data* verbatim (no CRC appended).
+    Used for AT+LED and TempEnum commands which are sent without getCrc().
     """
-    if len(data) < 10:
-        return {"success": False, "error": f"Frame too short ({len(data)} bytes)", "raw_hex": data.hex()}
-    if data[0] != STX_HIGH or data[1] != STX_LOW:
-        return {"success": False, "error": f"Bad STX: {data[0]:02X} {data[1]:02X}", "raw_hex": data.hex()}
-    ctrl, length, seq, cmd_id = struct.unpack_from("<BHHB", data, 2)
-    payload_start = 9
-    payload_end   = payload_start + length
-    if len(data) < payload_end + 2:
-        return {"success": False, "error": "Frame truncated", "raw_hex": data.hex()}
-    payload  = data[payload_start:payload_end]
-    crc_recv = struct.unpack_from("<H", data, payload_end)[0]
-    crc_calc = crc16(data[2:payload_end])
-    if crc_recv != crc_calc:
-        logger.warning("CRC mismatch: recv=0x%04X calc=0x%04X", crc_recv, crc_calc)
-    logger.debug("RX  cmd=0x%02X seq=%d len=%d payload=%s", cmd_id, seq, length, payload.hex())
-    return {
-        "success": True,
-        "cmd_id":  cmd_id,
-        "seq":     seq,
-        "payload": payload,
-        "raw_hex": data.hex(),
-    }
+    logger.debug("TX raw: %s", data)
+    return data.encode("utf-8")
 
 
 # ---------------------------------------------------------------------------
-# High-level command builders (return ready-to-send bytes)
+# PTZ gimbal direction
 # ---------------------------------------------------------------------------
 
-def cmd_gimbal_rotate(yaw_speed: int, pitch_speed: int, seq: int = 0) -> bytes:
-    """Send continuous gimbal rotation.  Speeds are signed int8 (-100…100)."""
-    yaw_speed   = max(-100, min(100, int(yaw_speed)))
-    pitch_speed = max(-100, min(100, int(pitch_speed)))
-    data = struct.pack("<bb", yaw_speed, pitch_speed)
-    return build_frame(CMD.GIMBAL_ROTATE, data, seq)
+def ptz(code: str) -> bytes:
+    """Build a PTZ control command.  code is 2-char hex like "01"."""
+    return build(f"#TPUG2wPTZ{code}")
 
 
-def cmd_gimbal_stop(seq: int = 0) -> bytes:
-    """Stop all gimbal motion (send zero speeds)."""
-    return cmd_gimbal_rotate(0, 0, seq)
-
-
-def cmd_center_gimbal(seq: int = 0) -> bytes:
-    return build_frame(CMD.CENTER_GIMBAL, bytes([0x01]), seq)
-
-
-def cmd_look_down(seq: int = 0) -> bytes:
-    return build_frame(CMD.LOOK_DOWN, b"", seq)
-
-
-def cmd_look_forward(seq: int = 0) -> bytes:
-    return build_frame(CMD.LOOK_FORWARD, b"", seq)
-
-
-def cmd_take_photo(seq: int = 0) -> bytes:
-    return build_frame(CMD.TAKE_PHOTO, b"", seq)
-
-
-def cmd_record_start(seq: int = 0) -> bytes:
-    return build_frame(CMD.VIDEO_RECORD, bytes([0x01]), seq)
-
-
-def cmd_record_stop(seq: int = 0) -> bytes:
-    return build_frame(CMD.VIDEO_RECORD, bytes([0x02]), seq)
-
-
-def cmd_zoom_in(seq: int = 0) -> bytes:
-    return build_frame(CMD.ZOOM_IN_STEP, b"", seq)
-
-
-def cmd_zoom_out(seq: int = 0) -> bytes:
-    return build_frame(CMD.ZOOM_OUT_STEP, b"", seq)
-
-
-def cmd_set_zoom(level: int, seq: int = 0) -> bytes:
-    level = max(1, min(30, int(level)))
-    return build_frame(CMD.SET_ZOOM, bytes([level]), seq)
-
-
-def cmd_set_palette(name: str, seq: int = 0) -> bytes:
-    pid = PALETTE_IDS.get(name, 0)
-    return build_frame(CMD.PALETTE, bytes([pid]), seq)
-
-
-def cmd_thermal_gain(mode: str, seq: int = 0) -> bytes:
-    m = {"low": 0x00, "high": 0x01, "auto": 0xFF}.get(mode.lower(), 0xFF)
-    return build_frame(CMD.THERMAL_GAIN, bytes([m]), seq)
-
-
-def cmd_temp_measure(enabled: bool, seq: int = 0) -> bytes:
-    return build_frame(CMD.TEMP_MEASURE, bytes([0x01 if enabled else 0x00]), seq)
-
-
-def cmd_image_settings(brightness: int = 50, contrast: int = 50,
-                       saturation: int = 50, sharpness: int = 50,
-                       seq: int = 0) -> bytes:
-    def clamp(v): return max(0, min(100, int(v)))
-    data = bytes([clamp(brightness), clamp(contrast), clamp(saturation), clamp(sharpness)])
-    return build_frame(CMD.IMAGE_SETTINGS, data, seq)
-
-
-def cmd_query_attitude(seq: int = 0) -> bytes:
-    return build_frame(CMD.GIMBAL_ATTITUDE, b"", seq)
-
-
-def cmd_reboot(seq: int = 0) -> bytes:
-    return build_frame(CMD.SYSTEM_REBOOT, b"", seq)
+CMD_PTZ_STOP         = lambda: ptz("00")
+CMD_PTZ_UP           = lambda: ptz("01")   # pitch up
+CMD_PTZ_DOWN         = lambda: ptz("02")   # pitch down
+CMD_PTZ_LEFT         = lambda: ptz("03")   # yaw left
+CMD_PTZ_RIGHT        = lambda: ptz("04")   # yaw right
+CMD_PTZ_CENTER       = lambda: ptz("05")   # return to center / back-mid
+CMD_PTZ_FOLLOW       = lambda: ptz("06")   # follow mode
+CMD_PTZ_LOCK         = lambda: ptz("07")   # lock head mode
+CMD_PTZ_FOLLOW_SW    = lambda: ptz("08")   # follow switch
+CMD_PTZ_CALIBRATE    = lambda: ptz("09")   # full calibration
+CMD_PTZ_HOIST        = lambda: ptz("0A")   # hoisting / upright mount
+CMD_PTZ_INVERT       = lambda: ptz("0B")   # inversion / inverted mount
+CMD_PTZ_H_CAL        = lambda: ptz("0C")   # horizontal calibration
+CMD_PTZ_V_CAL        = lambda: ptz("0D")   # vertical calibration
+CMD_PTZ_X_ADD        = lambda: ptz("0E")   # X trim +
+CMD_PTZ_X_REDUCE     = lambda: ptz("0F")   # X trim -
+CMD_PTZ_Y_ADD        = lambda: ptz("10")   # Y trim +
+CMD_PTZ_Y_REDUCE     = lambda: ptz("11")   # Y trim -
+CMD_PTZ_Z_ADD        = lambda: ptz("12")   # Z trim +
+CMD_PTZ_Z_REDUCE     = lambda: ptz("13")   # Z trim -
+CMD_PTZ_CLEAR_ADJ    = lambda: ptz("14")   # clear all adjustments
 
 
 # ---------------------------------------------------------------------------
-# Legacy stub kept so existing callers that import build_command still compile
+# Speed-based gimbal control (continuous, -99..99)
 # ---------------------------------------------------------------------------
-COMMANDS: dict = {}  # kept for import compatibility
+
+def int2hex(val: int) -> str:
+    """
+    Encode a signed integer as a 2-char signed hex string the way the app does.
+    Positive: "01".."63"  Zero: "00"  Negative: appended as signed byte hex.
+    The app uses int2Hex which formats as signed byte (FF=-1, FE=-2, …).
+    """
+    if val < -99:
+        val = -99
+    if val > 99:
+        val = 99
+    return f"{val & 0xFF:02X}"
 
 
-def build_command(name: str, params: dict | None = None) -> bytes:
-    """Legacy shim — prefer the cmd_* functions above."""
-    raise NotImplementedError(
-        "Use the cmd_* helpers (cmd_gimbal_rotate, cmd_center_gimbal, …) directly."
-    )
+def cmd_yaw_speed(speed: int) -> bytes:
+    """#TPUG2wGSY<speed_hex> — yaw at signed speed -99..99."""
+    return build(f"#TPUG2wGSY{int2hex(speed)}")
+
+
+def cmd_pitch_speed(speed: int) -> bytes:
+    """#TPUG2wGSP<speed_hex> — pitch at signed speed -99..99."""
+    return build(f"#TPUG2wGSP{int2hex(speed)}")
+
+
+# ---------------------------------------------------------------------------
+# Angle control (set absolute angle in degrees * 100, encoded as signed short)
+# ---------------------------------------------------------------------------
+
+def short2hex(val: int) -> str:
+    """Encode signed int as 4-char hex (big-endian signed short, like the app)."""
+    val = max(-9000, min(9000, val))
+    return f"{val & 0xFFFF:04X}"
+
+
+def cmd_set_yaw_angle(degrees: float) -> bytes:
+    """#TPUG6wGAY<angle_hex>10 — set absolute yaw angle."""
+    return build(f"#TPUG6wGAY{short2hex(int(degrees * 100))}10")
+
+
+def cmd_set_pitch_angle(degrees: float) -> bytes:
+    """#TPUG6wGAP<angle_hex>10 — set absolute pitch angle."""
+    return build(f"#TPUG6wGAP{short2hex(int(degrees * 100))}10")
+
+
+def cmd_set_roll_angle(degrees: float) -> bytes:
+    """#TPUG6wGAR<angle_hex>10 — set absolute roll angle."""
+    return build(f"#TPUG6wGAR{short2hex(int(degrees * 100))}10")
+
+
+# ---------------------------------------------------------------------------
+# Zoom and Focus
+# ---------------------------------------------------------------------------
+
+CMD_ZOOM_STOP  = lambda: build("#TPUM2wZMC00")
+CMD_ZOOM_IN    = lambda: build("#TPUM2wZMC01")
+CMD_ZOOM_OUT   = lambda: build("#TPUM2wZMC02")
+
+CMD_FOCUS_STOP    = lambda: build("#TPUM2wFCC00")
+CMD_FOCUS_IN      = lambda: build("#TPUM2wFCC01")   # add / closer
+CMD_FOCUS_OUT     = lambda: build("#TPUM2wFCC02")   # reduce / farther
+
+CMD_ZOOM_DEFAULT  = lambda: build("#TPUD2wDZM0A")   # reset zoom to default
+CMD_ZOOM_DIRECT   = lambda: build("#TPUD2wDZM0B")   # direct zoom mode
+
+
+# ---------------------------------------------------------------------------
+# Camera capture
+# ---------------------------------------------------------------------------
+
+CMD_TAKE_PHOTO     = lambda: build("#TPUD2wCAP01")
+CMD_REC_START      = lambda: build("#TPUD2wREC01")
+CMD_REC_STOP       = lambda: build("#TPUD2wREC00")
+CMD_REC_FLIP       = lambda: build("#TPUD2wREC0A")  # flip recording
+
+
+# ---------------------------------------------------------------------------
+# Query commands (camera replies with ASCII data)
+# ---------------------------------------------------------------------------
+
+CMD_QUERY_VERSION   = lambda: build("#TPUD2rVER00")
+CMD_QUERY_REC       = lambda: build("#TPUD2rREC00")
+CMD_QUERY_VID       = lambda: build("#TPUD2rVID00")
+CMD_QUERY_VOM       = lambda: build("#TPUD2rVOM00")
+CMD_QUERY_IQE       = lambda: build("#TPUD2rIQE00")
+CMD_QUERY_IP        = lambda: build("#TPUD2rIPV00")
+CMD_QUERY_GATEWAY   = lambda: build("#TPUD2rGTW00")
+CMD_QUERY_MODE      = lambda: build("#TPUD2rMOD00")
+CMD_QUERY_SD        = lambda: build("#TPUD2rSDC01")
+CMD_QUERY_THERMAL_B = lambda: build("#TPUD2rTIB00")
+CMD_QUERY_THERMAL_C = lambda: build("#TPUD2rTIC00")
+
+
+# ---------------------------------------------------------------------------
+# System
+# ---------------------------------------------------------------------------
+
+CMD_RESET          = lambda: build("#TPUD2wRST00")
+CMD_FACTORY_RESET  = lambda: build("#TPUD2wRTF01")
+
+CMD_LED_ON         = lambda: build_raw("AT+LED -e1\r\n")
+CMD_LED_OFF        = lambda: build_raw("AT+LED -e0\r\n")
+
+
+# ---------------------------------------------------------------------------
+# Palette list — kept for UI / MockController compatibility
+# (The real C12 does not expose palette control over the control port)
+# ---------------------------------------------------------------------------
+
+THERMAL_PALETTES: list[str] = [
+    "White Hot", "Black Hot", "Iron Red", "Rainbow",
+    "Arctic", "Lava", "Medical", "Fusion", "Amber",
+    "Red Hot", "Green Hot",
+]
+
+
+# ---------------------------------------------------------------------------
+# Response parser
+# ---------------------------------------------------------------------------
+
+def parse_response(raw: bytes) -> dict:
+    """
+    Attempt to parse an ASCII response from the camera.
+
+    Camera responses look like: "#TPUD2rVER00<version_string><CRC>"
+    or AT-style: "AT+t=<temperature>"
+
+    Returns dict with keys: success, raw_text, data
+    """
+    try:
+        text = raw.decode("utf-8", errors="replace").strip()
+    except Exception as e:
+        return {"success": False, "error": str(e), "raw_hex": raw.hex()}
+
+    logger.debug("RX: %s", text)
+    result: dict = {"success": True, "raw_text": text}
+
+    # Strip the trailing 2-char CRC if it looks like a #TP response
+    if text.startswith("#TP") and len(text) > 14:
+        # Last 2 chars are the CRC
+        body = text[:-2]
+        recv_crc = text[-2:]
+        calc_crc = crc(body)
+        result["crc_ok"] = (recv_crc.upper() == calc_crc.upper())
+        result["body"] = body
+        # Extract the 3-char tag (e.g. "VER", "REC", "VOM")
+        if len(body) >= 12:
+            result["tag"] = body[9:12]
+            result["data"] = body[12:]
+    elif text.startswith("AT+"):
+        result["body"] = text
+        result["tag"] = "AT"
+        result["data"] = text
+
+    return result
