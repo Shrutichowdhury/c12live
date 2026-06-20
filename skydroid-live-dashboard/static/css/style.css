@@ -1154,6 +1154,86 @@ footer kbd {
   margin-bottom: 16px;
 }
 
+/* --- Zoom ratio buttons (SDK: setZoomRatios 0-4) -------- */
+.zoom-ratio-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+
+.btn-zoom-ratio {
+  flex: 1;
+  min-width: 36px;
+  padding: 5px 4px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  background: var(--bg-card-alt);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  color: var(--text-sec);
+  cursor: pointer;
+  text-align: center;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.btn-zoom-ratio:hover {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+  color: var(--text-prim);
+}
+.btn-zoom-ratio.btn-active {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+  color: var(--accent);
+  box-shadow: 0 0 8px var(--accent-glow);
+}
+
+/* --- Angle goto row (gotoYaw / gotoPitch) -------------- */
+.angle-goto-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+  padding: 8px 10px;
+  background: var(--bg-card-alt);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+}
+
+.angle-inputs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  flex: 1;
+}
+
+.angle-input-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.75rem;
+  color: var(--text-sec);
+  white-space: nowrap;
+}
+
+.angle-number-input {
+  width: 66px;
+  padding: 4px 6px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-xs);
+  color: var(--text-prim);
+  font-size: 0.8rem;
+  text-align: center;
+}
+.angle-number-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  background: var(--bg-card-alt);
+}
+
 /* --- Responsive ----------------------------------------- */
 @media (max-width: 600px) {
   header { padding: 14px 16px; }

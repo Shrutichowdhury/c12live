@@ -4,6 +4,16 @@
  * Handles all API calls to gimbal, zoom, camera, thermal, image settings,
  * calibration, mode, and tracking endpoints.
  * Polls /api/status every second to keep the status panel current.
+ *
+ * SDK-confirmed protocol (AAR v1.9.1):
+ *   Port        : 5000 UDP
+ *   Speed yaw   : #TPUG2wGSY<signed-byte-hex>  (cmd_yaw_speed)
+ *   Speed pitch : #TPUG2wGSP<signed-byte-hex>  (cmd_pitch_speed)
+ *   Goto yaw    : #TPUG6wGAY<int16_hex>10      (gotoYaw)
+ *   Goto pitch  : #TPUG6wGAP<int16_hex>10      (gotoPitch)
+ *   Zoom ratio  : #TPUD2wDZM0<N:X>             (setZoomRatios 0-4)
+ *   Palette     : #TPUD2wIMG<index:02X>        (setThermalPalette)
+ *   Time sync   : #TPUDFwTIM<HHmmss><ddMMyy>.00 (setTime)
  */
 
 "use strict";
@@ -87,6 +97,18 @@ async function fetchStatus() {
     setText("zoom-display", (data.zoom || 1.0).toFixed(2) + "×");
   }
 
+  // Zoom ratio button sync
+  if (typeof data.zoom_ratio === "number") {
+    syncZoomRatioButtons(data.zoom_ratio);
+  }
+
+  // Palette select sync
+  const paletteSelect = document.getElementById("palette-select");
+  if (paletteSelect && typeof data.palette_index === "number"
+      && document.activeElement !== paletteSelect) {
+    paletteSelect.value = String(data.palette_index);
+  }
+
   // Recording indicator
   const recIndicator = document.getElementById("rec-indicator");
   if (recIndicator) {
@@ -132,7 +154,7 @@ const _holdIntervals = new Map();
 
 function startHold(endpoint, intervalMs = 150) {
   if (_holdIntervals.has(endpoint)) return;
-  apiPost(endpoint); // immediate first call
+  apiPost(endpoint);
   const id = setInterval(() => apiPost(endpoint), intervalMs);
   _holdIntervals.set(endpoint, id);
 }
@@ -172,6 +194,30 @@ function initGimbalControls() {
   on("btn-look-forward", "click", () => { apiPost("/api/gimbal/look_forward"); showToast("→ Looking forward"); });
 }
 
+// ─── Goto angle (SDK: gotoYaw / gotoPitch) ───────────────────────────────────
+
+function initGotoAngle() {
+  on("btn-goto-angle", "click", async () => {
+    const yaw   = parseFloat(document.getElementById("inp-goto-yaw")?.value   || 0);
+    const pitch = parseFloat(document.getElementById("inp-goto-pitch")?.value || 0);
+
+    if (isNaN(yaw) || yaw < -90 || yaw > 90) {
+      showToast("⚠ Yaw must be -90 to +90", "error"); return;
+    }
+    if (isNaN(pitch) || pitch < -90 || pitch > 90) {
+      showToast("⚠ Pitch must be -90 to +90", "error"); return;
+    }
+
+    const [ry, rp] = await Promise.all([
+      apiPost("/api/gimbal/goto_yaw",   { degrees: yaw }),
+      apiPost("/api/gimbal/goto_pitch", { degrees: pitch }),
+    ]);
+    if (ry.success && rp.success) {
+      showToast(`↗ Goto yaw ${yaw}° pitch ${pitch}°`, "success");
+    }
+  });
+}
+
 // ─── Zoom controls ───────────────────────────────────────────────────────────
 
 function initZoomControls() {
@@ -192,10 +238,33 @@ function initZoomControls() {
       setText("zoom-display", parseFloat(slider.value).toFixed(2) + "×");
     });
     slider.addEventListener("change", async () => {
-      const r = await apiPost("/api/camera/set_zoom", { level: parseFloat(slider.value) });
+      await apiPost("/api/camera/set_zoom", { level: parseFloat(slider.value) });
       showToast("🔍 Zoom " + parseFloat(slider.value).toFixed(2) + "×");
     });
   }
+}
+
+// ─── Discrete zoom ratio 0-4 (SDK: setZoomRatios, #TPUD2wDZM0N) ─────────────
+
+function syncZoomRatioButtons(activeRatio) {
+  document.querySelectorAll(".btn-zoom-ratio").forEach(btn => {
+    const r = parseInt(btn.dataset.ratio || "0", 10);
+    btn.classList.toggle("btn-active", r === activeRatio);
+  });
+}
+
+function initZoomRatioControls() {
+  document.querySelectorAll(".btn-zoom-ratio").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const ratio = parseInt(btn.dataset.ratio || "0", 10);
+      const labels = ["1× (1:1)", "2× digital", "4× digital", "8× digital", "16× digital"];
+      const r = await apiPost("/api/camera/zoom_ratio", { ratio });
+      if (r.success) {
+        syncZoomRatioButtons(ratio);
+        showToast(`🔍 Zoom ratio: ${labels[ratio]}`, "success");
+      }
+    });
+  });
 }
 
 // ─── Camera capture ──────────────────────────────────────────────────────────
@@ -215,14 +284,16 @@ function initCameraControls() {
   });
 }
 
-// ─── Thermal controls ────────────────────────────────────────────────────────
+// ─── Thermal palette (SDK: setThermalPalette, #TPUD2wIMG<index>) ─────────────
 
 function initThermalControls() {
   const paletteSelect = document.getElementById("palette-select");
   if (paletteSelect) {
     paletteSelect.addEventListener("change", async () => {
-      await apiPost("/api/thermal/set_palette", { palette: paletteSelect.value });
-      showToast("🌡 Palette: " + paletteSelect.value);
+      const index = parseInt(paletteSelect.value, 10);
+      const label = paletteSelect.options[paletteSelect.selectedIndex]?.text || "";
+      const r = await apiPost("/api/thermal/palette_index", { index });
+      if (r.success) showToast("🎨 Palette: " + label, "success");
     });
   }
 
@@ -241,6 +312,24 @@ function initThermalControls() {
       showToast("🌡 Temp measurement " + (tempToggle.checked ? "ON" : "OFF"));
     });
   }
+}
+
+// ─── Time sync (SDK: setTime, #TPUDFwTIM<HHmmss><ddMMyy>.00) ────────────────
+
+function initTimeSyncControl() {
+  on("btn-sync-time", "click", async () => {
+    const ts = Date.now();
+    const r = await apiPost("/api/camera/sync_time", { timestamp_ms: ts });
+    const resultEl = document.getElementById("sync-time-result");
+    if (r.success) {
+      const now = new Date(ts);
+      const utc = now.toUTCString().replace("GMT", "UTC");
+      showToast("⏱ Camera time synced to " + utc, "success");
+      if (resultEl) resultEl.textContent = "✓ Synced: " + utc;
+    } else {
+      if (resultEl) resultEl.textContent = "✗ " + (r.error || "Failed");
+    }
+  });
 }
 
 // ─── Image settings ──────────────────────────────────────────────────────────
@@ -378,7 +467,7 @@ async function loadConfig() {
   const ip   = document.getElementById("inp-camera-ip");
   const port = document.getElementById("inp-control-port");
   if (ip)   ip.value   = cfg.camera_ip    || "192.168.144.108";
-  if (port) port.value = cfg.control_port || 37260;
+  if (port) port.value = cfg.control_port || 5000;
   applyModeUI(cfg.mock_mode);
 }
 
@@ -401,7 +490,6 @@ function applyModeUI(isMock) {
   if (mockBtn) mockBtn.classList.toggle("btn-active", isMock);
   if (realBtn) realBtn.classList.toggle("btn-active", !isMock);
 
-  // Update header chip
   const chip = document.getElementById("status-mock");
   if (chip) {
     chip.textContent = isMock ? "Mock Mode" : "Real Mode";
@@ -420,7 +508,7 @@ function initConnectionSettings() {
 
   on("btn-enable-real", "click", async () => {
     const ip   = document.getElementById("inp-camera-ip")?.value   || "192.168.144.108";
-    const port = parseInt(document.getElementById("inp-control-port")?.value || "37260", 10);
+    const port = parseInt(document.getElementById("inp-control-port")?.value || "5000", 10);
     showToast("Connecting to " + ip + ":" + port + " …", "info");
     const r = await apiPost("/api/config", { mock_mode: false, camera_ip: ip, control_port: port });
     if (r.success) {
@@ -435,7 +523,7 @@ function initConnectionSettings() {
 
   on("btn-test-conn", "click", async () => {
     const ip   = document.getElementById("inp-camera-ip")?.value   || "192.168.144.108";
-    const port = parseInt(document.getElementById("inp-control-port")?.value || "37260", 10);
+    const port = parseInt(document.getElementById("inp-control-port")?.value || "5000", 10);
     const result = document.getElementById("conn-test-result");
 
     if (result) {
@@ -459,20 +547,20 @@ function initConnectionSettings() {
 
   on("btn-probe-conn", "click", async () => {
     const ip   = document.getElementById("inp-camera-ip")?.value   || "192.168.144.108";
-    const port = parseInt(document.getElementById("inp-control-port")?.value || "37260", 10);
+    const port = parseInt(document.getElementById("inp-control-port")?.value || "5000", 10);
     const box  = document.getElementById("conn-probe-result");
     const listenBox = document.getElementById("conn-listen-result");
     if (listenBox) listenBox.className = "conn-probe-result hidden";
 
     if (box) {
-      box.textContent = "⏳ Scanning 7 protocol formats + HTTP + passive listen on " + ip + ":" + port + " …\n(takes ~15 s, also sends a center-gimbal command — watch if the gimbal moves!)";
+      box.textContent = "⏳ Scanning protocol formats + HTTP + passive listen on " + ip + ":" + port + " …\n(takes ~15 s, also sends center-gimbal — watch if the gimbal moves!)";
       box.className = "conn-probe-result visible";
     }
 
     const r = await apiPost("/api/probe", { camera_ip: ip, control_port: port });
     if (!box) return;
 
-    let text = "═══ Real Skydroid ASCII Protocol Scan ═══\n" + ip + ":" + port + "\n\n";
+    let text = "═══ SkyDroid ASCII Protocol Scan ═══\n" + ip + ":" + port + "\n\n";
     let anyReply = false;
 
     (r.probes || []).forEach(p => {
@@ -520,10 +608,9 @@ function initConnectionSettings() {
       showToast("Camera replied! Real control ready.", "success");
     } else {
       text += "▸ No replies received (this can be normal).\n";
-      text += "▸ Commands WERE sent using the real Skydroid ASCII protocol.\n";
+      text += "▸ Commands WERE sent using real Skydroid ASCII protocol (port 5000 UDP).\n";
       text += "▸ Did the gimbal move when PTZ CENTER was sent? If yes → real control works!\n";
       text += "▸ Click \"Enable Real Control\" and try the D-pad buttons.\n";
-      text += "▸ Use the Raw Command panel below to send individual commands and watch for replies.\n";
       showToast("Scan complete — did the gimbal move?", "info");
     }
 
@@ -532,7 +619,7 @@ function initConnectionSettings() {
 
   on("btn-listen-conn", "click", async () => {
     const ip   = document.getElementById("inp-camera-ip")?.value   || "192.168.144.108";
-    const port = parseInt(document.getElementById("inp-control-port")?.value || "37260", 10);
+    const port = parseInt(document.getElementById("inp-control-port")?.value || "5000", 10);
     const box  = document.getElementById("conn-listen-result");
     const probeBox = document.getElementById("conn-probe-result");
     if (probeBox) probeBox.className = "conn-probe-result hidden";
@@ -551,9 +638,9 @@ function initConnectionSettings() {
     }
 
     if (r.count === 0) {
-      box.textContent = "📻 Listened " + port + " for 5 s — no packets received.\n\n"
+      box.textContent = "📻 Listened on port " + port + " for 5 s — no packets received.\n\n"
         + "Possible reasons:\n"
-        + "  • Camera broadcasts on a different port (try 37256, 37258, 14550)\n"
+        + "  • Camera broadcasts on a different port (try 9002, 5001)\n"
         + "  • Camera only sends after receiving a query first\n"
         + "  • Port " + port + " is already bound by another process\n\n"
         + "Try the Multi-Protocol Scan — it also passively listens and sends query packets.";
@@ -561,88 +648,67 @@ function initConnectionSettings() {
       return;
     }
 
-    let text = "📻 Got " + r.count + " packet(s) on port " + port + "!\n\n";
+    let text = "📻 Got " + r.count + " packet(s) on port " + port + ":\n\n";
     r.packets.forEach((p, i) => {
-      text += "Packet #" + (i + 1) + " from " + p.from + " (" + p.len + " bytes):\n";
-      if (p.ascii) text += "  ASCII: " + p.ascii + "\n";
-      text += "  Hex:   " + p.hex + "\n";
-      const h = p.hex;
-      const a = (p.ascii || "");
-      if (a.startsWith("#TP"))       text += "  → Real Skydroid ASCII protocol! ★\n";
-      else if (h.startsWith("5566")) text += "  → SIYI binary format\n";
-      else if (h.startsWith("6655")) text += "  → SIYI v2 binary format\n";
-      else if (h.startsWith("eb90")) text += "  → Viewpro format\n";
-      else if (h.startsWith("fe"))   text += "  → MAVLink v1\n";
-      else if (h.startsWith("fd"))   text += "  → MAVLink v2\n";
-      else                           text += "  → Unknown format\n";
-      text += "\n";
+      text += "Packet " + (i + 1) + " from " + p.from + " (" + p.len + " B):\n";
+      text += "  ASCII: " + p.ascii + "\n";
+      text += "  Hex:   " + p.hex + "\n\n";
     });
     box.textContent = text;
-    showToast("Received " + r.count + " packet(s) from camera!", "success");
+    showToast("Got " + r.count + " broadcast packet(s)!", "success");
   });
 
-  // ── Raw Command panel ────────────────────────────────────────────────────
+  // Raw command terminal
   on("btn-raw-send", "click", async () => {
-    const ip      = document.getElementById("inp-camera-ip")?.value   || "192.168.144.108";
-    const port    = parseInt(document.getElementById("inp-control-port")?.value || "37260", 10);
-    const cmdInp  = document.getElementById("inp-raw-cmd");
-    const addCrc  = document.getElementById("chk-raw-crc")?.checked !== false;
-    const box     = document.getElementById("raw-cmd-result");
-    const cmd     = cmdInp ? cmdInp.value.trim() : "";
+    const ip   = document.getElementById("inp-camera-ip")?.value   || "192.168.144.108";
+    const port = parseInt(document.getElementById("inp-control-port")?.value || "5000", 10);
+    const cmd  = document.getElementById("inp-raw-cmd")?.value?.trim() || "";
+    const addCrc = document.getElementById("chk-raw-crc")?.checked !== false;
+    const box  = document.getElementById("raw-cmd-result");
 
-    if (!cmd) { showToast("Enter a command first", "warning"); return; }
+    if (!cmd) { showToast("Enter a command first", "error"); return; }
+
     if (box) {
-      box.textContent = "⏳ Sending " + cmd + " …";
+      box.textContent = "Sending " + cmd + " …";
       box.className = "conn-probe-result visible";
     }
 
     const r = await apiPost("/api/raw_command", {
       cmd, add_crc: addCrc, camera_ip: ip, port, wait_reply: true,
     });
-    if (!box) return;
 
-    let text = "TX: " + (r.sent_ascii || cmd) + "\n";
-    text += "Hex: " + (r.sent_hex || "") + "\n\n";
-    if (r.reply_text) {
-      text += "RX: " + r.reply_text + "\n";
-      text += "Hex: " + r.reply_hex + "\n";
-      text += "From: " + r.reply_from + "\n";
-      showToast("Camera replied: " + r.reply_text.slice(0, 40), "success");
-    } else if (r.reply === "no_reply") {
-      text += "RX: no reply (2 s timeout)\n";
-      text += "(normal — many commands are fire-and-forget)";
-    } else if (r.error) {
-      text += "Error: " + r.error;
-      showToast("Error: " + r.error, "error");
+    if (!box) return;
+    let text = "";
+    text += "Sent:  " + (r.sent_ascii || cmd) + "\n";
+    text += "Hex:   " + (r.sent_hex || "") + "\n";
+    if (r.reply === "no_reply") {
+      text += "Reply: (none within 2 s)\n";
+    } else if (r.reply_ascii) {
+      text += "Reply: " + r.reply_ascii + "\n";
+      text += "RHex:  " + (r.reply_hex || "") + "\n";
+      if (r.reply_text) text += "Text:  " + r.reply_text + "\n";
     }
     box.textContent = text;
   });
-
-  // Allow Enter key in the raw command input
-  const rawCmdInp = document.getElementById("inp-raw-cmd");
-  if (rawCmdInp) {
-    rawCmdInp.addEventListener("keydown", e => {
-      if (e.key === "Enter") document.getElementById("btn-raw-send")?.click();
-    });
-  }
 }
 
-// ─── Bootstrap ───────────────────────────────────────────────────────────────
+// ─── Boot ────────────────────────────────────────────────────────────────────
 
-function init() {
-  initStreamControls();
+document.addEventListener("DOMContentLoaded", () => {
   initGimbalControls();
+  initGotoAngle();
   initZoomControls();
+  initZoomRatioControls();
   initCameraControls();
   initThermalControls();
+  initTimeSyncControl();
   initImageSettings();
   initCalibration();
   initWorkingMode();
   initSpeedMode();
   initTracking();
+  initStreamControls();
   initConnectionSettings();
   loadConfig();
-  // Polling is started by app.js once this file is loaded.
-}
-
-document.addEventListener("DOMContentLoaded", init);
+  // Status polling is started by app.js (avoids duplicate intervals)
+});

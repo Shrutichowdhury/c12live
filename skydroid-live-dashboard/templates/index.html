@@ -27,7 +27,7 @@
   </header>
 
   <!-- ═══════════════════════════════════════════════════════════
-       MOCK MODE BANNER (hidden when real mode is active)
+       MOCK MODE BANNER
   ═══════════════════════════════════════════════════════════ -->
   <div id="mock-banner" class="mock-banner">
     <span class="mock-banner-icon">⚠</span>
@@ -111,6 +111,20 @@
           <button id="btn-look-forward" class="btn btn-preset">→ Forward</button>
         </div>
 
+        <!-- Goto angle inputs -->
+        <div class="angle-goto-row">
+          <span class="mode-label">Goto Angle:</span>
+          <div class="angle-inputs">
+            <label class="angle-input-label" title="Yaw angle -90° to +90°">Yaw°
+              <input id="inp-goto-yaw" type="number" min="-90" max="90" step="1" value="0" class="angle-number-input" />
+            </label>
+            <label class="angle-input-label" title="Pitch angle -90° to +90°">Pitch°
+              <input id="inp-goto-pitch" type="number" min="-90" max="90" step="1" value="0" class="angle-number-input" />
+            </label>
+            <button id="btn-goto-angle" class="btn btn-preset">↗ Go</button>
+          </div>
+        </div>
+
         <!-- Speed mode -->
         <div class="mode-row">
           <span class="mode-label">Speed:</span>
@@ -183,8 +197,8 @@
 
         <hr class="divider" />
 
-        <!-- Zoom -->
-        <p class="sub-heading">Zoom</p>
+        <!-- Continuous zoom -->
+        <p class="sub-heading">Zoom (Continuous)</p>
         <div class="zoom-row">
           <button id="btn-zoom-out" class="btn btn-control" title="Zoom Out (X)">−</button>
           <input  id="zoom-slider" type="range" min="1" max="4" step="0.25" value="1" class="slider" />
@@ -192,6 +206,19 @@
         </div>
         <div class="zoom-display-row">
           <span id="zoom-display" class="zoom-value">1.00×</span>
+        </div>
+
+        <!-- Discrete zoom ratio (SDK: setZoomRatios) -->
+        <p class="sub-heading" style="margin-top:8px">Zoom Ratio (SDK: 0–4)</p>
+        <div class="zoom-ratio-row">
+          <button class="btn btn-zoom-ratio btn-active" data-ratio="0" title="1× original (setZoomRatios 0)">1×</button>
+          <button class="btn btn-zoom-ratio" data-ratio="1" title="2× digital (setZoomRatios 1)">2×</button>
+          <button class="btn btn-zoom-ratio" data-ratio="2" title="4× digital (setZoomRatios 2)">4×</button>
+          <button class="btn btn-zoom-ratio" data-ratio="3" title="8× digital (setZoomRatios 3)">8×</button>
+          <button class="btn btn-zoom-ratio" data-ratio="4" title="16× digital (setZoomRatios 4)">16×</button>
+        </div>
+        <div style="font-size:.7rem;color:var(--text-muted);margin-top:2px">
+          Wire: #TPUD2wDZM0<em>N</em> + CRC
         </div>
 
         <hr class="divider" />
@@ -218,19 +245,19 @@
       <section class="glass-card" aria-label="Thermal Settings">
         <p class="section-heading">Thermal</p>
 
-        <label class="field-label">Palette</label>
+        <!-- Palette — SDK enum names (setThermalPalette, #TPUD2wIMG<index>) -->
+        <label class="field-label">Palette <span style="font-size:.7rem;color:var(--text-muted)">(#TPUD2wIMG)</span></label>
         <select id="palette-select" class="select">
-          <option>White Hot</option>
-          <option>Black Hot</option>
-          <option>Iron Red</option>
-          <option>Rainbow</option>
-          <option>Arctic</option>
-          <option>Lava</option>
-          <option>Medical</option>
-          <option>Fusion</option>
-          <option>Amber</option>
-          <option>Red Hot</option>
-          <option>Green Hot</option>
+          <option value="0">White Hot (0)</option>
+          <option value="1">Sepia (1)</option>
+          <option value="2">Iron Bow (2)</option>
+          <option value="3">Rainbow (3)</option>
+          <option value="4">Aurora (4)</option>
+          <option value="5">Red Hot (5)</option>
+          <option value="6">Jungle (6)</option>
+          <option value="7">Medical (7)</option>
+          <option value="8">Black Hot (8)</option>
+          <option value="9">Glory Hot (9)</option>
         </select>
 
         <label class="field-label mt">Gain Mode</label>
@@ -246,6 +273,18 @@
           <span class="toggle-track"></span>
           <span class="toggle-text">Enabled</span>
         </label>
+
+        <hr class="divider" />
+
+        <!-- Time sync -->
+        <p class="sub-heading">Clock Sync <span style="font-size:.7rem;color:var(--text-muted)">(#TPUDFwTIM)</span></p>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <button id="btn-sync-time" class="btn btn-toggle">⏱ Sync Camera Time</button>
+          <span id="sync-time-result" style="font-size:.75rem;color:var(--text-muted)"></span>
+        </div>
+        <div style="font-size:.7rem;color:var(--text-muted);margin-top:3px">
+          Sends current UTC → camera RTC
+        </div>
 
         <hr class="divider" />
 
@@ -344,7 +383,7 @@
           </div>
           <div class="conn-field">
             <label class="field-label" for="inp-control-port">Control Port</label>
-            <input id="inp-control-port" type="number" class="text-input" value="37260" placeholder="37260" />
+            <input id="inp-control-port" type="number" class="text-input" value="5000" placeholder="5000" />
           </div>
           <div class="conn-field-actions">
             <button id="btn-test-conn"   class="btn btn-caution">🔌 Test</button>
@@ -375,9 +414,11 @@
             Quick-fill:
             <button class="btn btn-xs" onclick="document.getElementById('inp-raw-cmd').value='#TPUD2rVER00'">Version</button>
             <button class="btn btn-xs" onclick="document.getElementById('inp-raw-cmd').value='#TPUG2wPTZ05'">Center</button>
-            <button class="btn btn-xs" onclick="document.getElementById('inp-raw-cmd').value='#TPUG2wPTZ01'">PitchUp</button>
-            <button class="btn btn-xs" onclick="document.getElementById('inp-raw-cmd').value='#TPUG2wPTZ00'">Stop</button>
-            <button class="btn btn-xs" onclick="document.getElementById('inp-raw-cmd').value='#TPUM2wZMC01'">ZoomIn</button>
+            <button class="btn btn-xs" onclick="document.getElementById('inp-raw-cmd').value='#TPUG2wGSY64'">Yaw+100</button>
+            <button class="btn btn-xs" onclick="document.getElementById('inp-raw-cmd').value='#TPUG2wGSY00'">Yaw Stop</button>
+            <button class="btn btn-xs" onclick="document.getElementById('inp-raw-cmd').value='#TPUG6wGAP0BB810'">Pitch30°</button>
+            <button class="btn btn-xs" onclick="document.getElementById('inp-raw-cmd').value='#TPUD2wIMG00'">Palette0</button>
+            <button class="btn btn-xs" onclick="document.getElementById('inp-raw-cmd').value='#TPUD2wDZM00'">ZoomRatio0</button>
             <button class="btn btn-xs" onclick="document.getElementById('inp-raw-cmd').value='#TPUD2rREC00'">RecState</button>
           </div>
         </div>
@@ -392,15 +433,18 @@
               <li>Download the <code>skydroid-live-dashboard/</code> folder to a PC on the same network as the camera.</li>
               <li>Double-click <code>run_local.bat</code> (Windows) or run <code>./run_local.sh</code> (Mac/Linux) — installs Python deps and starts the server automatically.</li>
               <li>Open <code>http://localhost:5000</code> in your browser.</li>
-              <li>Click <strong>Test</strong> — if green, UDP port 37260 is reachable.</li>
+              <li>Click <strong>Test</strong> — if green, UDP port 5000 is reachable (confirmed from official SkyDroid SDK).</li>
               <li>Click <strong>Multi-Protocol Scan</strong> — sends real Skydroid ASCII commands and shows any replies. Watch if the gimbal physically moves when the Center command fires.</li>
               <li>Use the <strong>Raw Command Terminal</strong> above to send any individual command and see the exact bytes exchanged.</li>
               <li>Click <strong>Enable Real Control</strong> — all D-pad, zoom, and camera buttons will now send real ASCII commands directly to the camera over UDP.</li>
             </ol>
             <p class="conn-help-note">
-              Protocol confirmed from APK reverse-engineering: plain ASCII text over UDP 37260.<br>
-              Command format: <code>#TPUG2wPTZ01</code> + 2-hex-digit checksum (e.g. <code>#TPUG2wPTZ016B</code>).<br>
-              No binary encoding, no proprietary SDK needed.
+              Protocol confirmed from official SkyDroid SDK AAR v1.9.1 decompile.<br>
+              Camera port: <strong>5000 UDP</strong> (SDK: <code>getUDPPayload(C12, 5000, "192.168.144.108", 5000)</code>).<br>
+              Command format: <code>#TPUG2wPTZ01</code> + 2-hex-digit checksum → <code>#TPUG2wPTZ016B</code>.<br>
+              Thermal palette: <code>#TPUD2wIMG00</code>...<code>#TPUD2wIMG09</code> (0=White Hot, 9=Glory Hot).<br>
+              Discrete zoom: <code>#TPUD2wDZM00</code>...<code>#TPUD2wDZM04</code> (0=original, 1-4=digital zoom).<br>
+              Time sync: <code>#TPUDFwTIM&lt;HHmmss&gt;&lt;ddMMyy&gt;.00</code> + CRC.
             </p>
           </div>
         </details>
@@ -414,7 +458,7 @@
        FOOTER
   ═══════════════════════════════════════════════════════════ -->
   <footer>
-    SkyDroid C12 Control Center · Mock Mode enabled by default ·
+    SkyDroid C12 Control Center · SDK v1.9.1 protocol · UDP port 5000 ·
     Press <kbd>?</kbd> for keyboard shortcuts
   </footer>
 

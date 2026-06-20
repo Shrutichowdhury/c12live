@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 _config = {
     "camera_ip":    "192.168.144.108",
-    "control_port": 37260,
+    "control_port": 5000,   # SDK: PayloadManager.getUDPPayload(C12, 5000, ip, 5000)
     "mock_mode":    True,   # Start in mock mode; user can disable from the UI
 }
 
@@ -524,6 +524,41 @@ def api_camera_status():
 # Gimbal control
 # ---------------------------------------------------------------------------
 
+@app.route("/api/gimbal/speed", methods=["POST"])
+def gimbal_speed():
+    """
+    Continuous speed control (SDK: controlYaw / controlPitch).
+    Body: { "yaw": -100..100, "pitch": -100..100 }
+    Wire: #TPUG2wGSY<hex> / #TPUG2wGSP<hex>
+    """
+    body = request.json or {}
+    yaw_speed   = int(body.get("yaw", 0))
+    pitch_speed = int(body.get("pitch", 0))
+    return _call(controller.gimbal_speed, yaw_speed, pitch_speed)
+
+
+@app.route("/api/gimbal/goto_yaw", methods=["POST"])
+def gimbal_goto_yaw():
+    """
+    Go to absolute yaw angle (SDK: gotoYaw).
+    Body: { "degrees": -90.0..90.0 }
+    Wire: #TPUG6wGAY<int16_hex>10
+    """
+    degrees = float((request.json or {}).get("degrees", 0.0))
+    return _call(controller.goto_yaw, degrees)
+
+
+@app.route("/api/gimbal/goto_pitch", methods=["POST"])
+def gimbal_goto_pitch():
+    """
+    Go to absolute pitch angle (SDK: gotoPitch).
+    Body: { "degrees": -90.0..90.0 }
+    Wire: #TPUG6wGAP<int16_hex>10
+    """
+    degrees = float((request.json or {}).get("degrees", 0.0))
+    return _call(controller.goto_pitch, degrees)
+
+
 @app.route("/api/gimbal/pitch_up", methods=["POST"])
 def gimbal_pitch_up():
     speed = request.json.get("speed", 50) if request.json else 50
@@ -605,6 +640,29 @@ def camera_set_zoom():
     return _call(controller.set_zoom, level)
 
 
+@app.route("/api/camera/zoom_ratio", methods=["POST"])
+def camera_zoom_ratio():
+    """
+    Discrete zoom level 0-4 (SDK: setZoomRatios).
+    0=original image, 1-4=progressive digital zoom.
+    Body: { "ratio": 0..4 }
+    Wire: #TPUD2wDZM0<ratio:X>
+    """
+    ratio = int((request.json or {}).get("ratio", 0))
+    return _call(controller.set_zoom_ratio, ratio)
+
+
+@app.route("/api/camera/sync_time", methods=["POST"])
+def camera_sync_time():
+    """
+    Sync camera RTC to current UTC time (SDK: setTime).
+    Body: { "timestamp_ms": 1234567890000 }  (optional, defaults to server time)
+    Wire: #TPUDFwTIM<HHmmss><ddMMyy>.00
+    """
+    ts = (request.json or {}).get("timestamp_ms", None)
+    return _call(controller.sync_time, ts)
+
+
 # ---------------------------------------------------------------------------
 # Camera capture
 # ---------------------------------------------------------------------------
@@ -669,10 +727,28 @@ def calibration_fine_adjust():
 # Thermal settings
 # ---------------------------------------------------------------------------
 
+@app.route("/api/thermal/palettes", methods=["GET"])
+def thermal_palettes():
+    """Return the list of thermal palettes from the SDK (index, sdk name, label)."""
+    from services.command_protocol import THERMAL_PALETTES
+    return jsonify({"success": True, "palettes": THERMAL_PALETTES})
+
+
 @app.route("/api/thermal/set_palette", methods=["POST"])
 def thermal_set_palette():
     name = (request.json or {}).get("palette", "White Hot")
     return _call(controller.set_palette, name)
+
+
+@app.route("/api/thermal/palette_index", methods=["POST"])
+def thermal_set_palette_index():
+    """
+    Set thermal palette by SDK index 0-9 (SDK: setThermalPalette).
+    Body: { "index": 0..9 }
+    Wire: #TPUD2wIMG<index:02X>
+    """
+    index = int((request.json or {}).get("index", 0))
+    return _call(controller.set_palette_index, index)
 
 
 @app.route("/api/thermal/set_gain", methods=["POST"])
