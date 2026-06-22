@@ -255,16 +255,17 @@ CMD_ZOOM_QUERY = lambda: build("#TPUD2rDZM00")
 # ---------------------------------------------------------------------------
 
 THERMAL_PALETTES: list[dict] = [
-    {"index": 0, "sdk": "WHITE_HOT",  "label": "White Hot"},
-    {"index": 1, "sdk": "SEPIA",      "label": "Sepia"},
-    {"index": 2, "sdk": "IRONBOW",    "label": "Iron Bow"},
-    {"index": 3, "sdk": "RAINBOW",    "label": "Rainbow"},
-    {"index": 4, "sdk": "AURORA",     "label": "Aurora"},
-    {"index": 5, "sdk": "RED_HOT",    "label": "Red Hot"},
-    {"index": 6, "sdk": "JUNGLE",     "label": "Jungle"},
-    {"index": 7, "sdk": "MEDICAL",    "label": "Medical"},
-    {"index": 8, "sdk": "BLACK_HOT",  "label": "Black Hot"},
-    {"index": 9, "sdk": "GLORY_HOT",  "label": "Glory Hot"},
+    {"index": 0,  "sdk": "WHITE_HOT",  "label": "White Hot"},
+    {"index": 1,  "sdk": "SEPIA",      "label": "Sepia"},
+    {"index": 2,  "sdk": "IRONBOW",    "label": "Iron Bow"},
+    {"index": 3,  "sdk": "RAINBOW",    "label": "Rainbow"},
+    {"index": 4,  "sdk": "AURORA",     "label": "Aurora"},
+    {"index": 5,  "sdk": "RED_HOT",    "label": "Red Hot"},
+    {"index": 6,  "sdk": "JUNGLE",     "label": "Jungle"},
+    {"index": 7,  "sdk": "MEDICAL",    "label": "Medical"},
+    {"index": 8,  "sdk": "BLACK_HOT",  "label": "Black Hot"},
+    {"index": 9,  "sdk": "GLORY_HOT",  "label": "Glory Hot"},
+    {"index": 10, "sdk": "NIGHT",      "label": "Night"},
 ]
 
 # Also keep flat list for backward-compat
@@ -276,7 +277,7 @@ def cmd_set_thermal_palette(index: int) -> bytes:
     #TPUD2wIMG<index:02X> — set thermal camera palette.
     index: 0 (WHITE_HOT) to 9 (GLORY_HOT)
     """
-    index = max(0, min(9, int(index)))
+    index = max(0, min(10, int(index)))
     return build(f"#TPUD2wIMG{index:02X}")
 
 

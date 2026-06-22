@@ -245,17 +245,24 @@ function bindHold(btnId, endpoint) {
   btn.addEventListener("touchend",   stop);
 }
 
-// Non-gimbal repeating buttons (zoom in/out, etc.)
+// Non-gimbal repeating buttons (zoom in/out).
+// Uses pointerdown — works reliably on mouse, touch, and inside iframes.
+// No e.preventDefault() — avoids event suppression in proxied preview frames.
+// Each button owns its own interval (no shared Map entry confusion).
 function bindHoldAction(btnId, endpoint) {
   const btn = document.getElementById(btnId);
   if (!btn) return;
-  const start = e => { e.preventDefault(); startHold(endpoint); };
-  const stop  = ()  => stopHoldAction(endpoint);
-  btn.addEventListener("mousedown",  start);
-  btn.addEventListener("mouseup",    stop);
-  btn.addEventListener("mouseleave", stop);
-  btn.addEventListener("touchstart", start, { passive: false });
-  btn.addEventListener("touchend",   stop);
+  let _id = null;
+  const start = () => {
+    if (_id) return;
+    apiPost(endpoint);                               // fire immediately on press
+    _id = setInterval(() => apiPost(endpoint), 150); // repeat while held
+  };
+  const stop = () => { clearInterval(_id); _id = null; };
+  btn.addEventListener("pointerdown",   start);
+  btn.addEventListener("pointerup",     stop);
+  btn.addEventListener("pointerleave",  stop);
+  btn.addEventListener("pointercancel", stop);
 }
 
 // ─── Gimbal controls ──────────────────────────────────────────────────────────
@@ -345,16 +352,17 @@ function initZoomRatioControls() {
 // ─── Thermal palette strip ────────────────────────────────────────────────────
 
 const PALETTES = [
-  { index:0, label:"White Hot",  short:"WHT", color:"#e8e8e8" },
-  { index:1, label:"Sepia",      short:"SPA", color:"#b87333" },
-  { index:2, label:"Iron Bow",   short:"IRN", color:"#c0392b" },
-  { index:3, label:"Rainbow",    short:"RBW", color:"#9b59b6" },
-  { index:4, label:"Aurora",     short:"AUR", color:"#1abc9c" },
-  { index:5, label:"Red Hot",    short:"RED", color:"#e74c3c" },
-  { index:6, label:"Jungle",     short:"JNG", color:"#27ae60" },
-  { index:7, label:"Medical",    short:"MED", color:"#2980b9" },
-  { index:8, label:"Black Hot",  short:"BLK", color:"#555"    },
-  { index:9, label:"Glory Hot",  short:"GLR", color:"#f39c12" },
+  { index:0,  label:"White Hot",  short:"WHT", color:"#e8e8e8" },
+  { index:1,  label:"Sepia",      short:"SPA", color:"#b87333" },
+  { index:2,  label:"Iron Bow",   short:"IRN", color:"#c0392b" },
+  { index:3,  label:"Rainbow",    short:"RBW", color:"#9b59b6" },
+  { index:4,  label:"Aurora",     short:"AUR", color:"#1abc9c" },
+  { index:5,  label:"Red Hot",    short:"RED", color:"#e74c3c" },
+  { index:6,  label:"Jungle",     short:"JNG", color:"#27ae60" },
+  { index:7,  label:"Medical",    short:"MED", color:"#2980b9" },
+  { index:8,  label:"Black Hot",  short:"BLK", color:"#555"    },
+  { index:9,  label:"Glory Hot",  short:"GLR", color:"#f39c12" },
+  { index:10, label:"Night",      short:"NGT", color:"#1a237e" },
 ];
 
 function initPaletteStrip() {
