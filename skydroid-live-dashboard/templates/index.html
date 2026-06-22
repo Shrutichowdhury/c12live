@@ -2,492 +2,293 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>SkyDroid C12 — Control Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>SkyDroid C12 Live</title>
   <link rel="stylesheet" href="/static/css/style.css" />
 </head>
 <body>
 
-  <!-- ═══════════════════════════════════════════════════════════
-       HEADER
-  ═══════════════════════════════════════════════════════════ -->
-  <header>
-    <div class="header-left">
-      <div class="header-icon">🛸</div>
-      <div>
-        <h1>SkyDroid C12 Control Center</h1>
-        <p>Visible &amp; Thermal · Gimbal · Camera · Calibration</p>
+  <!-- ═══════════════════════════════════════════════════════
+       MAIN VIDEO (full viewport background)
+  ═══════════════════════════════════════════════════════ -->
+  <div class="video-bg" id="video-bg">
+    <img id="main-stream" src="/video/visible" alt="Main stream" draggable="false" />
+    <div class="video-no-signal hidden" id="no-signal">
+      <div class="no-signal-icon">📡</div>
+      <div class="no-signal-title">No Signal</div>
+      <div class="no-signal-sub">Camera offline · Run locally on same LAN as 192.168.144.108</div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════
+       TOP HUD BAR
+  ═══════════════════════════════════════════════════════ -->
+  <header class="hud hud-top">
+
+    <div class="hud-top-left">
+      <div class="live-badge" id="live-badge">
+        <span class="live-dot"></span>LIVE
       </div>
+      <div id="rec-badge" class="rec-badge hidden">
+        <span class="rec-dot-pulse"></span>
+        <span>REC</span>
+        <span id="rec-timer" class="rec-timer">00:00</span>
+      </div>
+      <span class="stream-type-chip" id="main-stream-label">VISIBLE</span>
     </div>
-    <div class="header-badges">
-      <span id="status-mock"      class="status-chip chip-inactive">Mock Mode</span>
-      <span id="status-recording" class="status-chip chip-inactive">Not Recording</span>
-      <span id="status-tracking"  class="status-chip chip-inactive">Tracking OFF</span>
+
+    <div class="hud-top-center">
+      <span class="brand-text">SkyDroid C12</span>
     </div>
+
+    <div class="hud-top-right">
+      <div class="signal-group">
+        <div class="signal-bars" id="signal-bars">
+          <span class="sig-bar s1"></span>
+          <span class="sig-bar s2"></span>
+          <span class="sig-bar s3"></span>
+          <span class="sig-bar s4"></span>
+        </div>
+        <span id="hud-fps" class="hud-stat-val">—</span>
+        <span class="hud-stat-unit">fps</span>
+      </div>
+      <div id="hud-mode" class="mode-chip mode-mock">MOCK</div>
+      <button id="btn-kb-help" class="icon-btn" title="Keyboard shortcuts (?)">⌨</button>
+      <button id="btn-settings" class="icon-btn" title="Settings">⚙</button>
+      <button id="btn-fullscreen" class="icon-btn" title="Full screen">⛶</button>
+    </div>
+
   </header>
 
-  <!-- ═══════════════════════════════════════════════════════════
-       MOCK MODE BANNER
-  ═══════════════════════════════════════════════════════════ -->
-  <div id="mock-banner" class="mock-banner">
-    <span class="mock-banner-icon">⚠</span>
-    <span class="mock-banner-text">
-      <strong>Mock Mode Active</strong> — Gimbal buttons work in the UI but
-      NO commands are sent to the camera. Open <strong>Connection Settings</strong>
-      below to switch to Real Mode.
-    </span>
-    <button class="mock-banner-btn" onclick="document.getElementById('connection-settings').scrollIntoView({behavior:'smooth'})">
-      Go to Settings ↓
-    </button>
-  </div>
-
-  <!-- ═══════════════════════════════════════════════════════════
-       MAIN CONTENT
-  ═══════════════════════════════════════════════════════════ -->
-  <main>
-
-    <!-- ── Top row: video + gimbal ─────────────────────────────── -->
-    <div class="top-row">
-
-      <!-- ── Video feeds ─────────────────────────────────────────── -->
-      <section class="video-section" aria-label="Live Video Feeds">
-        <p class="section-heading">Live Feeds</p>
-        <div class="video-grid">
-
-          <div class="video-card">
-            <div class="video-card-header">
-              <span class="video-card-title"><span class="icon">📷</span> Visible</span>
-              <span class="badge badge-offline" id="visible-status-cam">
-                <span class="badge-dot"></span> Offline
-              </span>
-            </div>
-            <div class="video-wrapper">
-              <img src="/video/visible" alt="Visible camera stream" loading="eager" />
-              <div class="video-overlay-fps" id="visible-fps-overlay">— fps</div>
-            </div>
-          </div>
-
-          <div class="video-card">
-            <div class="video-card-header">
-              <span class="video-card-title"><span class="icon">🌡️</span> Thermal</span>
-              <span class="badge badge-offline" id="thermal-status-cam">
-                <span class="badge-dot"></span> Offline
-              </span>
-            </div>
-            <div class="video-wrapper">
-              <img src="/video/thermal" alt="Thermal camera stream" loading="eager" />
-              <div class="video-overlay-fps" id="thermal-fps-overlay">— fps</div>
-            </div>
-          </div>
-
-        </div>
-      </section>
-
-      <!-- ── Gimbal control ──────────────────────────────────────── -->
-      <section class="gimbal-section glass-card" aria-label="Gimbal Control">
-        <p class="section-heading">Gimbal Control</p>
-        <p class="kb-hint">Hold button to move · <strong>W A S D Q E</strong> keys · <strong>?</strong> for all shortcuts</p>
-
-        <!-- D-pad -->
-        <div class="dpad">
-          <button id="btn-pitch-up"   class="dpad-btn dpad-up"    title="Pitch Up (W)">▲</button>
-          <button id="btn-yaw-left"   class="dpad-btn dpad-left"  title="Yaw Left (A)">◄</button>
-          <button id="btn-gimbal-stop" class="dpad-btn dpad-center" title="Stop (Space)">⬛</button>
-          <button id="btn-yaw-right"  class="dpad-btn dpad-right" title="Yaw Right (D)">►</button>
-          <button id="btn-pitch-down" class="dpad-btn dpad-down"  title="Pitch Down (S)">▼</button>
-        </div>
-
-        <!-- Roll row -->
-        <div class="roll-row">
-          <button id="btn-roll-left"  class="btn btn-control" title="Roll Left (Q)">↺ Roll L</button>
-          <button id="btn-roll-right" class="btn btn-control" title="Roll Right (E)">↻ Roll R</button>
-        </div>
-
-        <!-- Preset moves -->
-        <div class="preset-grid">
-          <button id="btn-center"       class="btn btn-preset" title="Center All (C)">✦ Center</button>
-          <button id="btn-center-yaw"   class="btn btn-preset">↔ Ctr Yaw</button>
-          <button id="btn-look-down"    class="btn btn-preset">↓ Look Down</button>
-          <button id="btn-look-forward" class="btn btn-preset">→ Forward</button>
-        </div>
-
-        <!-- Goto angle inputs -->
-        <div class="angle-goto-row">
-          <span class="mode-label">Goto Angle:</span>
-          <div class="angle-inputs">
-            <label class="angle-input-label" title="Yaw angle -90° to +90°">Yaw°
-              <input id="inp-goto-yaw" type="number" min="-90" max="90" step="1" value="0" class="angle-number-input" />
-            </label>
-            <label class="angle-input-label" title="Pitch angle -90° to +90°">Pitch°
-              <input id="inp-goto-pitch" type="number" min="-90" max="90" step="1" value="0" class="angle-number-input" />
-            </label>
-            <button id="btn-goto-angle" class="btn btn-preset">↗ Go</button>
-          </div>
-        </div>
-
-        <!-- Speed mode -->
-        <div class="mode-row">
-          <span class="mode-label">Speed:</span>
-          <button id="btn-speed-constant" class="btn btn-toggle btn-active">Constant</button>
-          <button id="btn-speed-variable" class="btn btn-toggle">Variable</button>
-        </div>
-      </section>
-
-    </div><!-- end top-row -->
-
-    <!-- ── Stream controls & status ────────────────────────────── -->
-    <section aria-label="Stream Controls">
-      <p class="section-heading">Stream &amp; Status</p>
-      <div class="status-bar glass-card">
-
-        <div class="stream-btns">
-          <button class="btn btn-start"   id="btn-start">▶ Start</button>
-          <button class="btn btn-stop"    id="btn-stop">■ Stop</button>
-          <button class="btn btn-refresh" id="btn-refresh">↻ Refresh</button>
-        </div>
-
-        <div class="stat-pills">
-          <div class="stat-pill">
-            <span class="pill-label">📷 Visible</span>
-            <span id="visible-status" class="badge badge-offline"><span class="badge-dot"></span> Offline</span>
-            <span id="visible-fps" class="pill-fps">— fps</span>
-          </div>
-          <div class="stat-pill">
-            <span class="pill-label">🌡️ Thermal</span>
-            <span id="thermal-status" class="badge badge-offline"><span class="badge-dot"></span> Offline</span>
-            <span id="thermal-fps" class="pill-fps">— fps</span>
-          </div>
-          <div class="stat-pill">
-            <span class="pill-label">⏱ Uptime</span>
-            <span id="uptime" class="pill-val">0s</span>
-          </div>
-          <div class="stat-pill">
-            <span class="pill-label">🔍 Zoom</span>
-            <span id="status-zoom" class="pill-val">1.00×</span>
-          </div>
-          <div class="stat-pill">
-            <span class="pill-label">🎨 Palette</span>
-            <span id="status-palette" class="pill-val">White Hot</span>
-          </div>
-          <div class="stat-pill">
-            <span class="pill-label">⌘ Last Cmd</span>
-            <span id="status-cmd" class="pill-val">—</span>
-          </div>
-        </div>
-
-      </div>
-    </section>
-
-    <!-- ── Second row: camera + thermal + image ────────────────── -->
-    <div class="control-row">
-
-      <!-- Camera capture -->
-      <section class="glass-card" aria-label="Camera Capture">
-        <p class="section-heading">Camera</p>
-
-        <div class="capture-btns">
-          <button id="btn-photo"     class="btn btn-photo">📷 Photo</button>
-          <button id="btn-rec-start" class="btn btn-rec">● Record</button>
-          <button id="btn-rec-stop"  class="btn btn-control">■ Stop Rec</button>
-        </div>
-        <div class="rec-status">
-          <span id="rec-indicator" class="rec-dot"></span>
-          <span class="rec-label">Recording</span>
-        </div>
-
-        <hr class="divider" />
-
-        <!-- Continuous zoom -->
-        <p class="sub-heading">Zoom (Continuous)</p>
-        <div class="zoom-row">
-          <button id="btn-zoom-out" class="btn btn-control" title="Zoom Out (X)">−</button>
-          <input  id="zoom-slider" type="range" min="1" max="4" step="0.25" value="1" class="slider" />
-          <button id="btn-zoom-in"  class="btn btn-control" title="Zoom In (Z)">+</button>
-        </div>
-        <div class="zoom-display-row">
-          <span id="zoom-display" class="zoom-value">1.00×</span>
-        </div>
-
-        <!-- Discrete zoom ratio (SDK: setZoomRatios) -->
-        <p class="sub-heading" style="margin-top:8px">Zoom Ratio (SDK: 0–4)</p>
-        <div class="zoom-ratio-row">
-          <button class="btn btn-zoom-ratio btn-active" data-ratio="0" title="1× original (setZoomRatios 0)">1×</button>
-          <button class="btn btn-zoom-ratio" data-ratio="1" title="2× digital (setZoomRatios 1)">2×</button>
-          <button class="btn btn-zoom-ratio" data-ratio="2" title="4× digital (setZoomRatios 2)">4×</button>
-          <button class="btn btn-zoom-ratio" data-ratio="3" title="8× digital (setZoomRatios 3)">8×</button>
-          <button class="btn btn-zoom-ratio" data-ratio="4" title="16× digital (setZoomRatios 4)">16×</button>
-        </div>
-        <div style="font-size:.7rem;color:var(--text-muted);margin-top:2px">
-          Wire: #TPUD2wDZM0<em>N</em> + CRC
-        </div>
-
-        <hr class="divider" />
-
-        <!-- Tracking -->
-        <p class="sub-heading">Target Tracking</p>
-        <div class="btn-pair">
-          <button id="btn-track-enable"  class="btn btn-success">🎯 Enable</button>
-          <button id="btn-track-disable" class="btn btn-control">✕ Disable</button>
-        </div>
-
-        <hr class="divider" />
-
-        <!-- Working mode -->
-        <p class="sub-heading">Working Mode</p>
-        <div class="btn-pair">
-          <button id="btn-mode-hoist"       class="btn btn-toggle">⬆ Hoist</button>
-          <button id="btn-mode-upside-down" class="btn btn-toggle">⬇ Inverted</button>
-        </div>
-
-      </section>
-
-      <!-- Thermal settings -->
-      <section class="glass-card" aria-label="Thermal Settings">
-        <p class="section-heading">Thermal</p>
-
-        <!-- Palette — SDK enum names (setThermalPalette, #TPUD2wIMG<index>) -->
-        <label class="field-label">Palette <span style="font-size:.7rem;color:var(--text-muted)">(#TPUD2wIMG)</span></label>
-        <select id="palette-select" class="select">
-          <option value="0">White Hot (0)</option>
-          <option value="1">Sepia (1)</option>
-          <option value="2">Iron Bow (2)</option>
-          <option value="3">Rainbow (3)</option>
-          <option value="4">Aurora (4)</option>
-          <option value="5">Red Hot (5)</option>
-          <option value="6">Jungle (6)</option>
-          <option value="7">Medical (7)</option>
-          <option value="8">Black Hot (8)</option>
-          <option value="9">Glory Hot (9)</option>
-        </select>
-
-        <label class="field-label mt">Gain Mode</label>
-        <select id="gain-select" class="select">
-          <option value="auto">Auto</option>
-          <option value="low">Low</option>
-          <option value="high">High</option>
-        </select>
-
-        <label class="field-label mt">Temperature Measurement</label>
-        <label class="toggle-row">
-          <input type="checkbox" id="temp-measure-toggle" class="toggle-input" />
-          <span class="toggle-track"></span>
-          <span class="toggle-text">Enabled</span>
-        </label>
-
-        <hr class="divider" />
-
-        <!-- Time sync -->
-        <p class="sub-heading">Clock Sync <span style="font-size:.7rem;color:var(--text-muted)">(#TPUDFwTIM)</span></p>
-        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-          <button id="btn-sync-time" class="btn btn-toggle">⏱ Sync Camera Time</button>
-          <span id="sync-time-result" style="font-size:.75rem;color:var(--text-muted)"></span>
-        </div>
-        <div style="font-size:.7rem;color:var(--text-muted);margin-top:3px">
-          Sends current UTC → camera RTC
-        </div>
-
-        <hr class="divider" />
-
-        <!-- Image settings -->
-        <p class="section-heading">Image Settings</p>
-
-        <div class="slider-group">
-          <div class="slider-row">
-            <span class="slider-label">Brightness</span>
-            <input id="slider-brightness" type="range" min="0" max="100" value="50" class="slider" />
-            <span id="val-brightness" class="slider-val">50</span>
-          </div>
-          <div class="slider-row">
-            <span class="slider-label">Contrast</span>
-            <input id="slider-contrast" type="range" min="0" max="100" value="50" class="slider" />
-            <span id="val-contrast" class="slider-val">50</span>
-          </div>
-          <div class="slider-row">
-            <span class="slider-label">Saturation</span>
-            <input id="slider-saturation" type="range" min="0" max="100" value="50" class="slider" />
-            <span id="val-saturation" class="slider-val">50</span>
-          </div>
-          <div class="slider-row">
-            <span class="slider-label">Sharpness</span>
-            <input id="slider-sharpness" type="range" min="0" max="100" value="50" class="slider" />
-            <span id="val-sharpness" class="slider-val">50</span>
-          </div>
-        </div>
-
-      </section>
-
-      <!-- Calibration -->
-      <section class="glass-card" aria-label="Calibration">
-        <p class="section-heading">Calibration</p>
-
-        <div class="cal-grid">
-          <button id="btn-cal-temp"  class="btn btn-caution">🌡 Temp Cal</button>
-          <button id="btn-cal-horiz" class="btn btn-caution">↔ Horizontal</button>
-          <button id="btn-cal-vert"  class="btn btn-caution">↕ Vertical</button>
-        </div>
-
-        <hr class="divider" />
-        <p class="sub-heading">Fine Adjustment</p>
-        <div class="fine-grid">
-          <label class="field-label-sm">Roll Offset</label>
-          <input id="fine-roll"  type="number" step="0.1" value="0" class="number-input" placeholder="0.0" />
-          <label class="field-label-sm">Pitch Offset</label>
-          <input id="fine-pitch" type="number" step="0.1" value="0" class="number-input" placeholder="0.0" />
-        </div>
-        <button id="btn-cal-fine" class="btn btn-caution mt-btn">✦ Apply Fine Adjust</button>
-
-      </section>
-
-    </div><!-- end control-row -->
-
-    <!-- ── Connection Settings ──────────────────────────────── -->
-    <section id="connection-settings" aria-label="Connection Settings">
-      <p class="section-heading">Connection Settings</p>
-      <div class="glass-card conn-card">
-
-        <!-- Local-only notice -->
-        <div class="local-only-notice">
-          <span class="local-only-icon">🖥</span>
-          <div>
-            <strong>Must run locally</strong> — this server needs to run on a computer
-            that is on the <strong>same LAN</strong> as the camera (<code>192.168.144.108</code>).
-            Cloud/Replit preview can never reach your camera's private IP.
-            <br>
-            Download the project and run <code>run_local.bat</code> (Windows) or
-            <code>./run_local.sh</code> (Mac/Linux), then open
-            <code>http://localhost:5000</code>.
-          </div>
-        </div>
-
-        <hr class="divider" />
-
-        <!-- Mode indicator -->
-        <div class="conn-mode-row">
-          <div id="conn-mode-indicator" class="conn-mode mock">
-            <span class="conn-mode-dot"></span>
-            <span id="conn-mode-label">Mock Mode — commands simulated</span>
-          </div>
-          <div class="conn-mode-actions">
-            <button id="btn-enable-mock"  class="btn btn-toggle">Enable Mock</button>
-            <button id="btn-enable-real"  class="btn btn-success">Enable Real Control</button>
-          </div>
-        </div>
-
-        <hr class="divider" />
-
-        <!-- Config fields + test/probe buttons -->
-        <div class="conn-fields">
-          <div class="conn-field">
-            <label class="field-label" for="inp-camera-ip">Camera IP</label>
-            <input id="inp-camera-ip" type="text" class="text-input" value="192.168.144.108" placeholder="192.168.144.108" />
-          </div>
-          <div class="conn-field">
-            <label class="field-label" for="inp-control-port">Control Port</label>
-            <input id="inp-control-port" type="number" class="text-input" value="5000" placeholder="5000" />
-          </div>
-          <div class="conn-field-actions">
-            <button id="btn-test-conn"   class="btn btn-caution">🔌 Test</button>
-            <button id="btn-probe-conn"  class="btn btn-toggle"  style="margin-left:6px">🔬 Multi-Protocol Scan</button>
-            <button id="btn-listen-conn" class="btn btn-toggle"  style="margin-left:6px">📻 Listen 5 s</button>
-          </div>
-        </div>
-
-        <!-- Test / probe / listen results -->
-        <div id="conn-test-result"   class="conn-test-result   hidden"></div>
-        <div id="conn-probe-result"  class="conn-probe-result  hidden"></div>
-        <div id="conn-listen-result" class="conn-probe-result  hidden"></div>
-
-        <!-- Raw Command panel -->
-        <hr class="divider" />
-        <div class="conn-fields" style="margin-top:8px">
-          <p class="section-heading" style="margin:0 0 8px;font-size:.85rem">Raw Command Terminal</p>
-          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-            <input id="inp-raw-cmd" type="text" class="text-input"
-                   style="flex:1;min-width:200px;font-family:monospace"
-                   placeholder="#TPUG2wPTZ01  ← type any command, CRC added auto" />
-            <button id="btn-raw-send" class="btn btn-toggle">⚡ Send</button>
-            <label style="display:flex;align-items:center;gap:4px;font-size:.8rem;color:var(--text-muted);white-space:nowrap">
-              <input id="chk-raw-crc" type="checkbox" checked /> auto-CRC
-            </label>
-          </div>
-          <div style="margin-top:6px;font-size:.75rem;color:var(--text-muted)">
-            Quick-fill:
-            <button class="btn btn-xs" onclick="document.getElementById('inp-raw-cmd').value='#TPUD2rVER00'">Version</button>
-            <button class="btn btn-xs" onclick="document.getElementById('inp-raw-cmd').value='#TPUG2wPTZ05'">Center</button>
-            <button class="btn btn-xs" onclick="document.getElementById('inp-raw-cmd').value='#TPUG2wGSY64'">Yaw+100</button>
-            <button class="btn btn-xs" onclick="document.getElementById('inp-raw-cmd').value='#TPUG2wGSY00'">Yaw Stop</button>
-            <button class="btn btn-xs" onclick="document.getElementById('inp-raw-cmd').value='#TPUG6wGAP0BB810'">Pitch30°</button>
-            <button class="btn btn-xs" onclick="document.getElementById('inp-raw-cmd').value='#TPUD2wIMG00'">Palette0</button>
-            <button class="btn btn-xs" onclick="document.getElementById('inp-raw-cmd').value='#TPUD2wDZM00'">ZoomRatio0</button>
-            <button class="btn btn-xs" onclick="document.getElementById('inp-raw-cmd').value='#TPUD2rREC00'">RecState</button>
-          </div>
-        </div>
-        <div id="raw-cmd-result" class="conn-probe-result hidden"></div>
-
-        <!-- Instructions -->
-        <hr class="divider" />
-        <details class="conn-help">
-          <summary class="conn-help-summary">Steps to get real gimbal control working</summary>
-          <div class="conn-help-body">
-            <ol>
-              <li>Download the <code>skydroid-live-dashboard/</code> folder to a PC on the same network as the camera.</li>
-              <li>Double-click <code>run_local.bat</code> (Windows) or run <code>./run_local.sh</code> (Mac/Linux) — installs Python deps and starts the server automatically.</li>
-              <li>Open <code>http://localhost:5000</code> in your browser.</li>
-              <li>Click <strong>Test</strong> — if green, UDP port 5000 is reachable (confirmed from official SkyDroid SDK).</li>
-              <li>Click <strong>Multi-Protocol Scan</strong> — sends real Skydroid ASCII commands and shows any replies. Watch if the gimbal physically moves when the Center command fires.</li>
-              <li>Use the <strong>Raw Command Terminal</strong> above to send any individual command and see the exact bytes exchanged.</li>
-              <li>Click <strong>Enable Real Control</strong> — all D-pad, zoom, and camera buttons will now send real ASCII commands directly to the camera over UDP.</li>
-            </ol>
-            <p class="conn-help-note">
-              Protocol confirmed from official SkyDroid SDK AAR v1.9.1 decompile.<br>
-              Camera port: <strong>5000 UDP</strong> (SDK: <code>getUDPPayload(C12, 5000, "192.168.144.108", 5000)</code>).<br>
-              Command format: <code>#TPUG2wPTZ01</code> + 2-hex-digit checksum → <code>#TPUG2wPTZ016B</code>.<br>
-              Thermal palette: <code>#TPUD2wIMG00</code>...<code>#TPUD2wIMG09</code> (0=White Hot, 9=Glory Hot).<br>
-              Discrete zoom: <code>#TPUD2wDZM00</code>...<code>#TPUD2wDZM04</code> (0=original, 1-4=digital zoom).<br>
-              Time sync: <code>#TPUDFwTIM&lt;HHmmss&gt;&lt;ddMMyy&gt;.00</code> + CRC.
-            </p>
-          </div>
-        </details>
-
-      </div>
-    </section>
-
-  </main><!-- end main -->
-
-  <!-- ═══════════════════════════════════════════════════════════
-       FOOTER
-  ═══════════════════════════════════════════════════════════ -->
-  <footer>
-    SkyDroid C12 Control Center · SDK v1.9.1 protocol · UDP port 5000 ·
-    Press <kbd>?</kbd> for keyboard shortcuts
-  </footer>
-
-  <!-- ═══════════════════════════════════════════════════════════
-       KEYBOARD SHORTCUT OVERLAY
-  ═══════════════════════════════════════════════════════════ -->
-  <div id="kb-overlay" class="kb-overlay" onclick="this.classList.remove('visible')">
-    <div class="kb-overlay-card" onclick="event.stopPropagation()">
-      <h2 class="kb-title">Keyboard Shortcuts</h2>
-      <div class="kb-grid">
-        <div class="kb-row"><kbd>W</kbd><span>Pitch Up</span></div>
-        <div class="kb-row"><kbd>S</kbd><span>Pitch Down</span></div>
-        <div class="kb-row"><kbd>A</kbd><span>Yaw Left</span></div>
-        <div class="kb-row"><kbd>D</kbd><span>Yaw Right</span></div>
-        <div class="kb-row"><kbd>Q</kbd><span>Roll Left</span></div>
-        <div class="kb-row"><kbd>E</kbd><span>Roll Right</span></div>
-        <div class="kb-row"><kbd>Space</kbd><span>Stop Motion</span></div>
-        <div class="kb-row"><kbd>C</kbd><span>Center All</span></div>
-        <div class="kb-row"><kbd>Z</kbd><span>Zoom In</span></div>
-        <div class="kb-row"><kbd>X</kbd><span>Zoom Out</span></div>
-        <div class="kb-row"><kbd>?</kbd><span>Toggle This Help</span></div>
-        <div class="kb-row"><kbd>Esc</kbd><span>Close Help</span></div>
-      </div>
-      <p class="kb-note">Arrow keys also work for Pitch / Yaw. Hold any key for continuous movement.</p>
-      <button class="btn btn-control mt-btn" onclick="document.getElementById('kb-overlay').classList.remove('visible')">Close</button>
+  <!-- ═══════════════════════════════════════════════════════
+       PIP — SECONDARY STREAM (top-right, click to swap)
+  ═══════════════════════════════════════════════════════ -->
+  <div class="pip-wrap" id="pip-wrap" title="Click to swap streams">
+    <img id="pip-stream" src="/video/thermal" alt="PIP stream" draggable="false" />
+    <div class="pip-label-bar">
+      <span id="pip-label">THERMAL</span>
+      <button class="pip-swap-btn" id="btn-swap-streams" title="Swap streams">⇄ Swap</button>
     </div>
   </div>
 
-  <!-- Toast notification -->
+  <!-- ═══════════════════════════════════════════════════════
+       LEFT HUD — GIMBAL ANGLE READOUT
+  ═══════════════════════════════════════════════════════ -->
+  <div class="hud hud-angles">
+    <div class="angle-item">
+      <span class="angle-axis-label">PITCH</span>
+      <div class="angle-bar-track">
+        <div class="angle-bar-fill" id="pitch-bar"></div>
+        <div class="angle-bar-center"></div>
+      </div>
+      <span class="angle-val" id="display-pitch">0.0°</span>
+    </div>
+    <div class="angle-item">
+      <span class="angle-axis-label">YAW</span>
+      <div class="angle-bar-track">
+        <div class="angle-bar-fill" id="yaw-bar"></div>
+        <div class="angle-bar-center"></div>
+      </div>
+      <span class="angle-val" id="display-yaw">0.0°</span>
+    </div>
+    <div class="angle-item">
+      <span class="angle-axis-label">ZOOM</span>
+      <span class="angle-val" id="zoom-readout">1×</span>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════
+       THERMAL PALETTE STRIP (right side, collapsible)
+  ═══════════════════════════════════════════════════════ -->
+  <div class="palette-strip" id="palette-strip">
+    <button class="palette-toggle-btn" id="btn-palette-toggle" title="Thermal palette">
+      <span class="palette-toggle-icon">🌡</span>
+      <span class="palette-toggle-label" id="palette-current-label">WHT</span>
+    </button>
+    <div class="palette-drawer" id="palette-drawer"></div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════
+       BOTTOM CONTROLS HUD
+  ═══════════════════════════════════════════════════════ -->
+  <div class="hud hud-bottom">
+
+    <!-- Left: Gimbal D-pad -->
+    <div class="ctrl-block gimbal-block">
+      <div class="dpad">
+        <button id="btn-pitch-up"    class="dp-btn dp-n" title="Tilt Up (W)">▲</button>
+        <div class="dpad-row">
+          <button id="btn-yaw-left"  class="dp-btn dp-w" title="Pan Left (A)">◄</button>
+          <button id="btn-gimbal-stop" class="dp-btn dp-c" title="Stop (Space)">■</button>
+          <button id="btn-yaw-right" class="dp-btn dp-e" title="Pan Right (D)">►</button>
+        </div>
+        <button id="btn-pitch-down"  class="dp-btn dp-s" title="Tilt Down (S)">▼</button>
+      </div>
+      <div class="gimbal-aux-row">
+        <button id="btn-roll-left"   class="aux-btn" title="Roll Left (Q)">↺</button>
+        <button id="btn-center"      class="aux-btn center-aux-btn" title="Center (C)">⊕</button>
+        <button id="btn-roll-right"  class="aux-btn" title="Roll Right (E)">↻</button>
+      </div>
+      <span class="ctrl-label">GIMBAL</span>
+    </div>
+
+    <!-- Center: Camera actions -->
+    <div class="ctrl-block camera-block">
+      <button id="btn-photo" class="action-btn" title="Take photo">
+        <span class="action-icon">📷</span>
+        <span class="action-label">PHOTO</span>
+      </button>
+      <button id="btn-rec-toggle" class="action-btn rec-action-btn" title="Record">
+        <span class="action-icon" id="rec-icon">⏺</span>
+        <span class="action-label" id="rec-label">REC</span>
+      </button>
+    </div>
+
+    <!-- Right: Zoom -->
+    <div class="ctrl-block zoom-block">
+      <div class="zoom-ratio-row">
+        <button class="zr-btn active" data-ratio="0" title="1× original">1×</button>
+        <button class="zr-btn" data-ratio="1" title="2× digital">2×</button>
+        <button class="zr-btn" data-ratio="2" title="4× digital">4×</button>
+        <button class="zr-btn" data-ratio="3" title="8× digital">8×</button>
+        <button class="zr-btn" data-ratio="4" title="16× digital">16×</button>
+      </div>
+      <div class="zoom-fine-row">
+        <button id="btn-zoom-out" class="zoom-fine-btn" title="Zoom out (X)">−</button>
+        <span id="zoom-display" class="zoom-val">1.0×</span>
+        <button id="btn-zoom-in"  class="zoom-fine-btn" title="Zoom in (Z)">+</button>
+      </div>
+      <span class="ctrl-label">ZOOM</span>
+    </div>
+
+  </div><!-- end hud-bottom -->
+
+  <!-- ═══════════════════════════════════════════════════════
+       SETTINGS MODAL
+  ═══════════════════════════════════════════════════════ -->
+  <div class="settings-overlay hidden" id="settings-overlay">
+    <div class="settings-panel" id="settings-panel">
+
+      <div class="sp-header">
+        <span class="sp-title">Settings</span>
+        <button id="btn-settings-close" class="sp-close">✕</button>
+      </div>
+
+      <!-- Connection -->
+      <div class="sp-section">
+        <div class="sp-section-title">CONNECTION</div>
+        <div class="sp-conn-status">
+          <span id="conn-mode-text" class="conn-status-text mock">⚠ Mock Mode — not connected to camera</span>
+        </div>
+        <div class="sp-field-row">
+          <label class="sp-label">Camera IP</label>
+          <input id="inp-camera-ip" type="text" class="sp-input" value="192.168.144.108" />
+        </div>
+        <div class="sp-field-row">
+          <label class="sp-label">UDP Port</label>
+          <input id="inp-control-port" type="number" class="sp-input sp-input-sm" value="5000" />
+        </div>
+        <div class="sp-btn-row">
+          <button id="btn-enable-real" class="sp-btn sp-btn-primary">⚡ Go Live</button>
+          <button id="btn-enable-mock" class="sp-btn">Simulation</button>
+          <button id="btn-test-conn"   class="sp-btn">🔌 Test</button>
+          <button id="btn-probe-conn"  class="sp-btn">🔬 Scan</button>
+        </div>
+        <div id="conn-result" class="sp-result hidden"></div>
+      </div>
+
+      <!-- Thermal -->
+      <div class="sp-section">
+        <div class="sp-section-title">THERMAL</div>
+        <div class="sp-field-row">
+          <label class="sp-label">Gain Mode</label>
+          <select id="gain-select" class="sp-select">
+            <option value="auto">Auto</option>
+            <option value="low">Low</option>
+            <option value="high">High</option>
+          </select>
+        </div>
+        <div class="sp-field-row">
+          <label class="sp-label">Temperature Measurement</label>
+          <input type="checkbox" id="temp-measure-toggle" class="sp-checkbox" />
+        </div>
+      </div>
+
+      <!-- Gimbal -->
+      <div class="sp-section">
+        <div class="sp-section-title">GIMBAL</div>
+        <div class="sp-field-row">
+          <label class="sp-label">Go To Angle</label>
+          <div class="sp-inline-row">
+            <label class="sp-inline-label">Yaw°
+              <input id="inp-goto-yaw" type="number" min="-90" max="90" value="0" class="sp-input sp-input-xs" />
+            </label>
+            <label class="sp-inline-label">Pitch°
+              <input id="inp-goto-pitch" type="number" min="-90" max="90" value="0" class="sp-input sp-input-xs" />
+            </label>
+            <button id="btn-goto-angle" class="sp-btn sp-btn-primary">Go ↗</button>
+          </div>
+        </div>
+        <div class="sp-btn-row">
+          <button id="btn-look-down"    class="sp-btn">↓ Nadir (−90°)</button>
+          <button id="btn-look-forward" class="sp-btn">→ Forward (0°)</button>
+          <button id="btn-sync-time"    class="sp-btn">⏱ Sync Time</button>
+        </div>
+        <div id="sync-result" class="sp-result hidden"></div>
+      </div>
+
+      <!-- Advanced -->
+      <div class="sp-section">
+        <div class="sp-section-title">ADVANCED</div>
+        <div class="sp-btn-row">
+          <button id="btn-cal-temp"  class="sp-btn">🌡 Temp Cal</button>
+          <button id="btn-cal-horiz" class="sp-btn">↔ H-Cal</button>
+          <button id="btn-cal-vert"  class="sp-btn">↕ V-Cal</button>
+        </div>
+        <div class="sp-field-row" style="margin-top:10px">
+          <label class="sp-label">Raw Command</label>
+        </div>
+        <div class="sp-inline-row">
+          <input id="inp-raw-cmd" type="text" class="sp-input" style="font-family:monospace;flex:1"
+                 placeholder="#TPUG2wPTZ00" />
+          <label style="display:flex;align-items:center;gap:4px;font-size:.75rem;color:var(--t2);white-space:nowrap">
+            <input id="chk-raw-crc" type="checkbox" checked /> CRC
+          </label>
+          <button id="btn-raw-send" class="sp-btn sp-btn-primary">Send</button>
+        </div>
+        <div id="raw-result" class="sp-result hidden"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════
+       KEYBOARD SHORTCUTS OVERLAY
+  ═══════════════════════════════════════════════════════ -->
+  <div id="kb-overlay" class="kb-overlay hidden" onclick="this.classList.add('hidden')">
+    <div class="kb-card" onclick="event.stopPropagation()">
+      <div class="kb-header">
+        <span>Keyboard Shortcuts</span>
+        <button onclick="document.getElementById('kb-overlay').classList.add('hidden')">✕</button>
+      </div>
+      <div class="kb-grid">
+        <span class="kb-key">W / ↑</span><span>Tilt Up</span>
+        <span class="kb-key">S / ↓</span><span>Tilt Down</span>
+        <span class="kb-key">A / ←</span><span>Pan Left</span>
+        <span class="kb-key">D / →</span><span>Pan Right</span>
+        <span class="kb-key">Q</span><span>Roll Left</span>
+        <span class="kb-key">E</span><span>Roll Right</span>
+        <span class="kb-key">Space</span><span>Stop Motion</span>
+        <span class="kb-key">C</span><span>Center Gimbal</span>
+        <span class="kb-key">Z</span><span>Zoom In</span>
+        <span class="kb-key">X</span><span>Zoom Out</span>
+        <span class="kb-key">?</span><span>This Help</span>
+        <span class="kb-key">Esc</span><span>Close Overlays</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast -->
   <div id="toast"></div>
 
   <script src="/static/js/app.js"></script>
