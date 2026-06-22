@@ -439,42 +439,78 @@ html, body {
 .aux-btn.kb-active { background: var(--accent-dim); color: var(--accent); }
 .center-aux-btn { font-size: 1rem; }
 
-/* ─── CAMERA ACTION BUTTONS ──────────────────────────────────────────── */
+/* ─── CAMERA ACTION BUTTONS (DJI-style ring buttons) ─────────────────── */
 
-.camera-block { gap: 10px; }
+.camera-block {
+  flex-direction: row;
+  gap: 20px;
+  align-items: center;
+}
 
-.action-btn {
+.cam-btn {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
-  width: 64px; height: 64px;
-  border-radius: 50%;
-  border: 2px solid rgba(255,255,255,.25);
-  background: rgba(255,255,255,.08);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  color: var(--t1);
+  gap: 6px;
+  background: none;
+  border: none;
   cursor: pointer;
-  transition: background .15s, border-color .15s, transform .1s;
+  padding: 4px;
   -webkit-tap-highlight-color: transparent;
+  transition: opacity .15s;
 }
-.action-btn:hover { background: rgba(255,255,255,.15); border-color: rgba(255,255,255,.4); }
-.action-btn:active { transform: scale(.92); }
+.cam-btn:active { opacity: .7; transform: scale(.94); }
 
-.action-icon  { font-size: 1.3rem; line-height:1; }
-.action-label { font-size: .52rem; font-weight:800; letter-spacing:.1em; }
+/* Outer white ring */
+.cam-icon-ring {
+  width: 58px; height: 58px;
+  border-radius: 50%;
+  border: 3.5px solid rgba(255,255,255,.88);
+  display: flex; align-items: center; justify-content: center;
+  transition: border-color .2s;
+}
 
-.rec-action-btn { border-color: rgba(255,59,48,.4); }
-.rec-action-btn:hover { border-color: var(--red); background: var(--red-dim); }
-.rec-action-btn.recording {
+/* Inner filled shape */
+.cam-icon-dot {
+  border-radius: 50%;
+  transition: border-radius .25s ease, width .25s ease, height .25s ease, background .2s;
+}
+
+/* Photo: white filled circle */
+.photo-dot {
+  width: 44px; height: 44px;
+  background: rgba(255,255,255,.88);
+}
+.cam-photo-btn:hover .cam-icon-ring { border-color: #fff; }
+.cam-photo-btn:hover .photo-dot     { background: #fff; }
+
+/* REC: red circle → red square (stop) when recording */
+.rec-dot {
+  width: 28px; height: 28px;
+  background: var(--red);
+}
+.cam-rec-btn:hover .cam-icon-ring { border-color: var(--red); }
+
+.cam-rec-btn.recording .cam-icon-ring {
   border-color: var(--red);
-  background: var(--red-dim);
-  animation: rec-pulse 1.2s ease-in-out infinite;
+  animation: rec-ring-pulse 1.1s ease-in-out infinite;
 }
-@keyframes rec-pulse {
-  0%,100% { box-shadow: 0 0 0 0 rgba(255,59,48,.4); }
-  50%      { box-shadow: 0 0 0 8px rgba(255,59,48,0); }
+.cam-rec-btn.recording .rec-dot {
+  width: 22px; height: 22px;
+  border-radius: 4px;
+}
+
+@keyframes rec-ring-pulse {
+  0%,100% { box-shadow: 0 0 0 0 rgba(255,59,48,.5); }
+  50%      { box-shadow: 0 0 0 7px rgba(255,59,48,0); }
+}
+
+/* Label under button */
+.cam-btn-label {
+  font-size: .6rem;
+  font-weight: 800;
+  letter-spacing: .12em;
+  color: rgba(255,255,255,.65);
 }
 
 /* ─── ZOOM CONTROLS ──────────────────────────────────────────────────── */

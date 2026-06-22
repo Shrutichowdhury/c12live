@@ -88,7 +88,14 @@ function initFullscreen() {
   });
   document.addEventListener("fullscreenchange", () => {
     const btn = document.getElementById("btn-fullscreen");
-    if (btn) btn.textContent = document.fullscreenElement ? "✕⛶" : "⛶";
+    if (!btn) return;
+    if (document.fullscreenElement) {
+      btn.textContent = "⊡";
+      btn.title = "Exit full screen";
+    } else {
+      btn.textContent = "⛶";
+      btn.title = "Full screen";
+    }
   });
 }
 
@@ -141,7 +148,6 @@ async function fetchStatus() {
     if (recBadge) recBadge.classList.toggle("hidden", !_recording);
     const recBtn = document.getElementById("btn-rec-toggle");
     if (recBtn) recBtn.classList.toggle("recording", _recording);
-    setText("rec-icon",  _recording ? "⏹" : "⏺");
     setText("rec-label", _recording ? "STOP" : "REC");
   }
 
@@ -211,21 +217,45 @@ function startHold(endpoint, ms = 140) {
   _holdIntervals.set(endpoint, id);
 }
 
-function stopHold(endpoint) {
+// Gimbal hold: fires stop command when finger/mouse lifts
+function stopHoldGimbal(endpoint) {
   if (!_holdIntervals.has(endpoint)) return;
   clearInterval(_holdIntervals.get(endpoint));
   _holdIntervals.delete(endpoint);
-  apiPost("/api/gimbal/stop");
+  if (_holdIntervals.size === 0) apiPost("/api/gimbal/stop");
 }
 
+// Action hold (zoom, etc.): just stops the interval — NO gimbal stop
+function stopHoldAction(endpoint) {
+  if (!_holdIntervals.has(endpoint)) return;
+  clearInterval(_holdIntervals.get(endpoint));
+  _holdIntervals.delete(endpoint);
+}
+
+// Gimbal D-pad buttons
 function bindHold(btnId, endpoint) {
   const btn = document.getElementById(btnId);
   if (!btn) return;
-  btn.addEventListener("mousedown",  e => { e.preventDefault(); startHold(endpoint); });
-  btn.addEventListener("mouseup",    ()  => stopHold(endpoint));
-  btn.addEventListener("mouseleave", ()  => stopHold(endpoint));
-  btn.addEventListener("touchstart", e => { e.preventDefault(); startHold(endpoint); }, { passive: false });
-  btn.addEventListener("touchend",   ()  => stopHold(endpoint));
+  const start = e => { e.preventDefault(); startHold(endpoint); };
+  const stop  = ()  => stopHoldGimbal(endpoint);
+  btn.addEventListener("mousedown",  start);
+  btn.addEventListener("mouseup",    stop);
+  btn.addEventListener("mouseleave", stop);
+  btn.addEventListener("touchstart", start, { passive: false });
+  btn.addEventListener("touchend",   stop);
+}
+
+// Non-gimbal repeating buttons (zoom in/out, etc.)
+function bindHoldAction(btnId, endpoint) {
+  const btn = document.getElementById(btnId);
+  if (!btn) return;
+  const start = e => { e.preventDefault(); startHold(endpoint); };
+  const stop  = ()  => stopHoldAction(endpoint);
+  btn.addEventListener("mousedown",  start);
+  btn.addEventListener("mouseup",    stop);
+  btn.addEventListener("mouseleave", stop);
+  btn.addEventListener("touchstart", start, { passive: false });
+  btn.addEventListener("touchend",   stop);
 }
 
 // ─── Gimbal controls ──────────────────────────────────────────────────────────
@@ -289,8 +319,8 @@ function initCameraControls() {
 // ─── Zoom ─────────────────────────────────────────────────────────────────────
 
 function initZoomControls() {
-  bindHold("btn-zoom-in",  "/api/camera/zoom_in");
-  bindHold("btn-zoom-out", "/api/camera/zoom_out");
+  bindHoldAction("btn-zoom-in",  "/api/camera/zoom_in");
+  bindHoldAction("btn-zoom-out", "/api/camera/zoom_out");
 }
 
 function syncZoomRatioButtons(activeRatio) {

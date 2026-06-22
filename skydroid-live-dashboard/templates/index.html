@@ -72,32 +72,6 @@
   </div>
 
   <!-- ═══════════════════════════════════════════════════════
-       LEFT HUD — GIMBAL ANGLE READOUT
-  ═══════════════════════════════════════════════════════ -->
-  <div class="hud hud-angles">
-    <div class="angle-item">
-      <span class="angle-axis-label">PITCH</span>
-      <div class="angle-bar-track">
-        <div class="angle-bar-fill" id="pitch-bar"></div>
-        <div class="angle-bar-center"></div>
-      </div>
-      <span class="angle-val" id="display-pitch">0.0°</span>
-    </div>
-    <div class="angle-item">
-      <span class="angle-axis-label">YAW</span>
-      <div class="angle-bar-track">
-        <div class="angle-bar-fill" id="yaw-bar"></div>
-        <div class="angle-bar-center"></div>
-      </div>
-      <span class="angle-val" id="display-yaw">0.0°</span>
-    </div>
-    <div class="angle-item">
-      <span class="angle-axis-label">ZOOM</span>
-      <span class="angle-val" id="zoom-readout">1×</span>
-    </div>
-  </div>
-
-  <!-- ═══════════════════════════════════════════════════════
        THERMAL PALETTE STRIP (right side, collapsible)
   ═══════════════════════════════════════════════════════ -->
   <div class="palette-strip" id="palette-strip">
@@ -132,15 +106,19 @@
       <span class="ctrl-label">GIMBAL</span>
     </div>
 
-    <!-- Center: Camera actions -->
+    <!-- Center: Camera actions (DJI-style ring buttons) -->
     <div class="ctrl-block camera-block">
-      <button id="btn-photo" class="action-btn" title="Take photo">
-        <span class="action-icon">📷</span>
-        <span class="action-label">PHOTO</span>
+      <button id="btn-photo" class="cam-btn cam-photo-btn" title="Take photo">
+        <span class="cam-icon-ring">
+          <span class="cam-icon-dot photo-dot"></span>
+        </span>
+        <span class="cam-btn-label">PHOTO</span>
       </button>
-      <button id="btn-rec-toggle" class="action-btn rec-action-btn" title="Record">
-        <span class="action-icon" id="rec-icon">⏺</span>
-        <span class="action-label" id="rec-label">REC</span>
+      <button id="btn-rec-toggle" class="cam-btn cam-rec-btn" title="Record / Stop">
+        <span class="cam-icon-ring">
+          <span class="cam-icon-dot rec-dot" id="rec-dot"></span>
+        </span>
+        <span class="cam-btn-label" id="rec-label">REC</span>
       </button>
     </div>
 
