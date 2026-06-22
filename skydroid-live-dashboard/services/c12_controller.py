@@ -147,25 +147,44 @@ class C12Controller:
     # ------------------------------------------------------------------
 
     def pitch_up(self, speed: int = 50) -> dict:
-        return self._cmd(proto.CMD_PTZ_UP(), {"last_command": "pitch_up"})
+        """
+        Continuous pitch up using speed command (#TPUG2wGSP).
+        Using PTZ_UP (#TPUG2wPTZ01) is WRONG — it jumps to the extreme angle instantly.
+        Speed commands give smooth incremental motion at the requested rate.
+        """
+        s = max(1, min(100, int(speed)))
+        return self._cmd(proto.cmd_pitch_speed(+s), {"last_command": "pitch_up"})
 
     def pitch_down(self, speed: int = 50) -> dict:
-        return self._cmd(proto.CMD_PTZ_DOWN(), {"last_command": "pitch_down"})
+        """Continuous pitch down. Negative speed = downward."""
+        s = max(1, min(100, int(speed)))
+        return self._cmd(proto.cmd_pitch_speed(-s), {"last_command": "pitch_down"})
 
     def yaw_left(self, speed: int = 50) -> dict:
-        return self._cmd(proto.CMD_PTZ_LEFT(), {"last_command": "yaw_left"})
+        """Continuous yaw left. Negative speed = leftward."""
+        s = max(1, min(100, int(speed)))
+        return self._cmd(proto.cmd_yaw_speed(-s), {"last_command": "yaw_left"})
 
     def yaw_right(self, speed: int = 50) -> dict:
-        return self._cmd(proto.CMD_PTZ_RIGHT(), {"last_command": "yaw_right"})
+        """Continuous yaw right. Positive speed = rightward."""
+        s = max(1, min(100, int(speed)))
+        return self._cmd(proto.cmd_yaw_speed(+s), {"last_command": "yaw_right"})
 
     def roll_left(self, speed: int = 50) -> dict:
-        return self._cmd(proto.cmd_yaw_speed(-50), {"last_command": "roll_left"})
+        s = max(1, min(100, int(speed)))
+        return self._cmd(proto.cmd_yaw_speed(-s), {"last_command": "roll_left"})
 
     def roll_right(self, speed: int = 50) -> dict:
-        return self._cmd(proto.cmd_yaw_speed(50), {"last_command": "roll_right"})
+        s = max(1, min(100, int(speed)))
+        return self._cmd(proto.cmd_yaw_speed(+s), {"last_command": "roll_right"})
 
     def stop_motion(self) -> dict:
-        return self._cmd(proto.CMD_PTZ_STOP(), {"last_command": "stop"})
+        """
+        Stop all continuous motion by zeroing both axes.
+        cmd_stop_speed() only zeros yaw; we must also zero pitch separately.
+        """
+        self._cmd(proto.cmd_yaw_speed(0),   {"last_command": "stop_yaw"})
+        return self._cmd(proto.cmd_pitch_speed(0), {"last_command": "stop"})
 
     def center_all(self) -> dict:
         return self._cmd(proto.CMD_PTZ_CENTER(),
