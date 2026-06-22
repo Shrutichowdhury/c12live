@@ -90,14 +90,26 @@ _start_time: float = time.time()
 # MJPEG helper
 # ---------------------------------------------------------------------------
 def _mjpeg_generator(stream: StreamManager):
+    """
+    Yield MJPEG frames at a capped rate (~30 fps).
+
+    Without a sleep this loop spins at 100 % CPU, competing with the
+    capture thread for the GIL and causing visible frame-rate drops.
+    We also skip yielding when the frame hasn't changed (same object),
+    which avoids sending duplicate data over the socket.
+    """
+    last_frame: bytes | None = None
     while True:
         frame = stream.get_frame()
-        yield (
-            b"--frame\r\n"
-            b"Content-Type: image/jpeg\r\n\r\n"
-            + frame +
-            b"\r\n"
-        )
+        if frame is not last_frame:          # new frame available
+            last_frame = frame
+            yield (
+                b"--frame\r\n"
+                b"Content-Type: image/jpeg\r\n\r\n"
+                + frame +
+                b"\r\n"
+            )
+        time.sleep(0.033)                    # cap at ~30 fps; keeps GIL free
 
 
 # ---------------------------------------------------------------------------

@@ -187,7 +187,7 @@ function initGimbalControls() {
   bindHold("btn-roll-left",  "/api/gimbal/roll_left");
   bindHold("btn-roll-right", "/api/gimbal/roll_right");
 
-  on("btn-stop",         "click", () => { apiPost("/api/gimbal/stop");        showToast("⬛ Motion stopped"); });
+  on("btn-gimbal-stop",  "click", () => { apiPost("/api/gimbal/stop");        showToast("⬛ Motion stopped"); });
   on("btn-center",       "click", () => { apiPost("/api/gimbal/center");       showToast("✦ Centered all axes"); });
   on("btn-center-yaw",   "click", () => { apiPost("/api/gimbal/center_yaw");   showToast("↔ Yaw centred"); });
   on("btn-look-down",    "click", () => { apiPost("/api/gimbal/look_down");    showToast("↓ Looking down"); });

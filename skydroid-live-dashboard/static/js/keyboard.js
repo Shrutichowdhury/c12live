@@ -135,7 +135,7 @@ const KEY_EL_MAP = {
   ArrowRight: "btn-yaw-right",
   KeyQ:       "btn-roll-left",
   KeyE:       "btn-roll-right",
-  Space:      "btn-stop",
+  Space:      "btn-gimbal-stop",
   KeyC:       "btn-center",
   KeyZ:       "btn-zoom-in",
   KeyX:       "btn-zoom-out",
